@@ -18,7 +18,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 @PluginDescriptor(
 	name = "Bank Tab Names",
 	description = "Customize your bank tabs with custom styled names",
-	tags = {"nickname", "custom", "edit", "psyda"}
+	tags = {"bank", "tab", "name", "custom", "edit", "psyda"}
 )
 
 public class BankTabNamesPlugin extends Plugin
