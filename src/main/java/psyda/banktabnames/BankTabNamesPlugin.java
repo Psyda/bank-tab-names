@@ -17,6 +17,9 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
+import java.awt.*;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -118,36 +121,27 @@ public class BankTabNamesPlugin extends Plugin {
     private void replaceText() {
         final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
         if (bankTabCont != null) {
-            bankTabCont.getChild(11).setText(config.tab1Name());
-            bankTabCont.getChild(11).setText(config.tab1Name());
-            bankTabCont.getChild(12).setText(config.tab2Name());
-            bankTabCont.getChild(13).setText(config.tab3Name());
-            bankTabCont.getChild(14).setText(config.tab4Name());
-            bankTabCont.getChild(15).setText(config.tab5Name());
-            bankTabCont.getChild(16).setText(config.tab6Name());
-            bankTabCont.getChild(17).setText(config.tab7Name());
-            bankTabCont.getChild(18).setText(config.tab8Name());
-            bankTabCont.getChild(19).setText(config.tab9Name());
-
-            bankTabCont.getChild(11).setFontId(config.bankFont1().tabFontId);
-            bankTabCont.getChild(12).setFontId(config.bankFont2().tabFontId);
-            bankTabCont.getChild(13).setFontId(config.bankFont3().tabFontId);
-            bankTabCont.getChild(14).setFontId(config.bankFont4().tabFontId);
-            bankTabCont.getChild(15).setFontId(config.bankFont5().tabFontId);
-            bankTabCont.getChild(16).setFontId(config.bankFont6().tabFontId);
-            bankTabCont.getChild(17).setFontId(config.bankFont7().tabFontId);
-            bankTabCont.getChild(18).setFontId(config.bankFont8().tabFontId);
-            bankTabCont.getChild(19).setFontId(config.bankFont9().tabFontId);
-
-            bankTabCont.getChild(11).setTextColor(config.bankFontColor1().getRGB());
-            bankTabCont.getChild(12).setTextColor(config.bankFontColor2().getRGB());
-            bankTabCont.getChild(13).setTextColor(config.bankFontColor3().getRGB());
-            bankTabCont.getChild(14).setTextColor(config.bankFontColor4().getRGB());
-            bankTabCont.getChild(15).setTextColor(config.bankFontColor5().getRGB());
-            bankTabCont.getChild(16).setTextColor(config.bankFontColor6().getRGB());
-            bankTabCont.getChild(17).setTextColor(config.bankFontColor7().getRGB());
-            bankTabCont.getChild(18).setTextColor(config.bankFontColor8().getRGB());
-            bankTabCont.getChild(19).setTextColor(config.bankFontColor9().getRGB());
+            for (int i = 10; i < 20; i++) {
+                Widget bankTabChild = bankTabCont.getChild(i);
+                Method tabNameMethod = null;
+                Method tabFontIdMethod = null;
+                Method tabTextColorMethod = null;
+                int methodIndex = i % 10;
+                try {
+                    tabNameMethod = config.getClass().getMethod("tab" + methodIndex + "Name");
+                    tabFontIdMethod = config.getClass().getMethod("bankFont" + methodIndex);
+                    tabTextColorMethod = config.getClass().getMethod("bankFontColor" + methodIndex);
+                } catch (NoSuchMethodException e) {
+                    throw new RuntimeException(e);
+                }
+                try {
+                    bankTabChild.setText((String)tabNameMethod.invoke(config));
+                    bankTabChild.setFontId(((TabFonts) tabFontIdMethod.invoke(config)).tabFontId);
+                    bankTabChild.setTextColor(((Color)tabTextColorMethod.invoke(config)).getRGB());
+                } catch (IllegalAccessException | InvocationTargetException e) {
+                    throw new RuntimeException(e);
+                }
+            }
 
             if (!config.disableMainTabName()) {
                 bankTabCont.getChild(10).setType(4);
