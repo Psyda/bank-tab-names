@@ -17,6 +17,9 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
+import java.awt.*;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -115,60 +118,60 @@ public class BankTabNamesPlugin extends Plugin {
     }
 
 
+    /**
+     * This replaces the bank tabs with custom configuration
+     */
     private void replaceText() {
         final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
         if (bankTabCont != null) {
-            bankTabCont.getChild(11).setText(config.tab1Name());
-            bankTabCont.getChild(11).setText(config.tab1Name());
-            bankTabCont.getChild(12).setText(config.tab2Name());
-            bankTabCont.getChild(13).setText(config.tab3Name());
-            bankTabCont.getChild(14).setText(config.tab4Name());
-            bankTabCont.getChild(15).setText(config.tab5Name());
-            bankTabCont.getChild(16).setText(config.tab6Name());
-            bankTabCont.getChild(17).setText(config.tab7Name());
-            bankTabCont.getChild(18).setText(config.tab8Name());
-            bankTabCont.getChild(19).setText(config.tab9Name());
+            for (int i = 10; i < 20; i++) {
+                Widget bankTabChild = bankTabCont.getChild(i);
+                if (bankTabChild != null) {
+                    Method tabNameMethod;
+                    Method tabFontIdMethod;
+                    Method tabTextColorMethod;
+                    int tabIndex = i % 10;
+                    try {
+                        tabNameMethod = config.getClass().getMethod("tab" + tabIndex + "Name");
+                        tabFontIdMethod = config.getClass().getMethod("bankFont" + tabIndex);
+                        tabTextColorMethod = config.getClass().getMethod("bankFontColor" + tabIndex);
+                    } catch (NoSuchMethodException e) {
+                        throw new RuntimeException(e);
+                    }
 
-            bankTabCont.getChild(11).setFontId(config.bankFont1().tabFontId);
-            bankTabCont.getChild(12).setFontId(config.bankFont2().tabFontId);
-            bankTabCont.getChild(13).setFontId(config.bankFont3().tabFontId);
-            bankTabCont.getChild(14).setFontId(config.bankFont4().tabFontId);
-            bankTabCont.getChild(15).setFontId(config.bankFont5().tabFontId);
-            bankTabCont.getChild(16).setFontId(config.bankFont6().tabFontId);
-            bankTabCont.getChild(17).setFontId(config.bankFont7().tabFontId);
-            bankTabCont.getChild(18).setFontId(config.bankFont8().tabFontId);
-            bankTabCont.getChild(19).setFontId(config.bankFont9().tabFontId);
-
-            bankTabCont.getChild(11).setTextColor(config.bankFontColor1().getRGB());
-            bankTabCont.getChild(12).setTextColor(config.bankFontColor2().getRGB());
-            bankTabCont.getChild(13).setTextColor(config.bankFontColor3().getRGB());
-            bankTabCont.getChild(14).setTextColor(config.bankFontColor4().getRGB());
-            bankTabCont.getChild(15).setTextColor(config.bankFontColor5().getRGB());
-            bankTabCont.getChild(16).setTextColor(config.bankFontColor6().getRGB());
-            bankTabCont.getChild(17).setTextColor(config.bankFontColor7().getRGB());
-            bankTabCont.getChild(18).setTextColor(config.bankFontColor8().getRGB());
-            bankTabCont.getChild(19).setTextColor(config.bankFontColor9().getRGB());
-
-            if (!config.disableMainTabName()) {
-                bankTabCont.getChild(10).setType(4);
-                bankTabCont.getChild(10).setOpacity(0);
-                bankTabCont.getChild(10).setOriginalY(0);
-                bankTabCont.getChild(10).setXTextAlignment(1);
-                bankTabCont.getChild(10).setYTextAlignment(1);
-                bankTabCont.getChild(10).setOriginalWidth(41);
-                bankTabCont.getChild(10).setOriginalHeight(40);
-                bankTabCont.getChild(10).setText(config.tab0Name());
-                bankTabCont.getChild(10).setTextColor(config.bankFontColor0().getRGB());
-                bankTabCont.getChild(10).setFontId(config.bankFont0().tabFontId);
-                clientThread.invoke(bankTabCont.getChild(10)::revalidate);
+                    try {
+                        bankTabChild.setText((String) tabNameMethod.invoke(config));
+                        bankTabChild.setFontId(((TabFonts) tabFontIdMethod.invoke(config)).tabFontId);
+                        bankTabChild.setTextColor(((Color) tabTextColorMethod.invoke(config)).getRGB());
+                    } catch (IllegalAccessException | InvocationTargetException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
             }
-            if (config.disableMainTabName()) {
-                bankTabCont.getChild(10).setOpacity(20);
-                bankTabCont.getChild(10).setType(5);
-                bankTabCont.getChild(10).setOriginalWidth(36);
-                bankTabCont.getChild(10).setOriginalHeight(32);
-                bankTabCont.getChild(10).setOriginalY(4);
-                clientThread.invoke(bankTabCont.getChild(10)::revalidate);
+            Widget mainTab = bankTabCont.getChild(10);
+
+            if (mainTab != null) {
+                if (!config.disableMainTabName()) {
+                    mainTab.setType(4);
+                    mainTab.setOpacity(0);
+                    mainTab.setOriginalY(0);
+                    mainTab.setXTextAlignment(1);
+                    mainTab.setYTextAlignment(1);
+                    mainTab.setOriginalWidth(41);
+                    mainTab.setOriginalHeight(40);
+                    mainTab.setText(config.tab0Name());
+                    mainTab.setTextColor(config.bankFontColor0().getRGB());
+                    mainTab.setFontId(config.bankFont0().tabFontId);
+                }
+
+                if (config.disableMainTabName()) {
+                    mainTab.setOpacity(20);
+                    mainTab.setType(5);
+                    mainTab.setOriginalWidth(36);
+                    mainTab.setOriginalHeight(32);
+                    mainTab.setOriginalY(4);
+                }
+                clientThread.invoke(mainTab::revalidate);
             }
         }
     }
