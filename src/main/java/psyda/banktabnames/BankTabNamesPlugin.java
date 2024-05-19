@@ -20,6 +20,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import java.awt.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -42,16 +43,16 @@ public class BankTabNamesPlugin extends Plugin {
     private static final int TAB_MAX_LENGTH = 15;
 
     private final int[] scriptIDs = {
-			ScriptID.BANKMAIN_BUILD,
-			ScriptID.BANKMAIN_INIT,
-			ScriptID.BANKMAIN_FINISHBUILDING,
-			ScriptID.BANKMAIN_SEARCH_REFRESH,
-			ScriptID.BANKMAIN_SEARCH_TOGGLE,
-			ScriptID.BANKMAIN_SIZE_CHECK,
-			3275,
-			276,
-			504
-	};
+            ScriptID.BANKMAIN_BUILD,
+            ScriptID.BANKMAIN_INIT,
+            ScriptID.BANKMAIN_FINISHBUILDING,
+            ScriptID.BANKMAIN_SEARCH_REFRESH,
+            ScriptID.BANKMAIN_SEARCH_TOGGLE,
+            ScriptID.BANKMAIN_SIZE_CHECK,
+            3275,
+            276,
+            504
+    };
 
     @Provides
     BankTabNamesConfig getConfig(ConfigManager configManager) {
@@ -59,58 +60,66 @@ public class BankTabNamesPlugin extends Plugin {
     }
 
     @Override
-    protected void startUp() throws Exception {
-        clientThread.invoke(this::replaceBankTabNumbers);
+    protected void startUp() {
+        clientThread.invoke(this::preformatBankTabs);
     }
 
     @Subscribe
     public void onConfigChanged(ConfigChanged event) {
-        replaceBankTabNumbers();
+        preformatBankTabs();
     }
 
     @Subscribe
     public void onScriptPostFired(ScriptPostFired scriptPostFired) {
         if (IntStream.of(scriptIDs).anyMatch(x -> x == scriptPostFired.getScriptId())) {
-			try {
-				replaceBankTabNumbers();
-			} catch (Exception exception) {
-				log.warn(String.valueOf(scriptPostFired.getScriptId()));
-			}
+            preformatBankTabs();
         }
     }
 
-    private void replaceBankTabNumbers() {
+    /**
+     * This loops over checking for different variables for each bank tab set in either mode and
+     * sets them accordingly so that each mode looks identical with tags on.
+     */
+    private void preformatBankTabs() {
         final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
         if (bankTabCont != null) {
-            //Checking if Bank tab is on the "First item in Tab" OR the "Roman Numerals" Modes.
-            if (bankTabCont.getChild(11).getType() == 5 || bankTabCont.getChild(11).getHeight() == 35) {
-                for (int i = 11; i < 20; i++) // This loops over checking for Different variables for each bank tab set in either mode and sets them accordingly so that each mode looks identical with tags on.
-                {
-                    Widget bankTabChildren = bankTabCont.getChild(i);
-                    int getChildX = (bankTabChildren.getOriginalX());
-                    int widgetType = bankTabCont.getChild(19).getType();
-                    if (widgetType == 4 && bankTabCont.getChild(19).getHeight() != 35) {
-                        continue;
-                    }
-                    bankTabChildren.setOpacity(0);
-                    bankTabChildren.setOriginalY(0);
-                    bankTabChildren.setXTextAlignment(1);
-                    bankTabChildren.setYTextAlignment(1);
-                    bankTabChildren.setOriginalWidth(41);
-                    bankTabChildren.setOriginalHeight(40);
-                    bankTabChildren.setOriginalHeight(40);
-                    bankTabChildren.setItemId(-1);
-                    bankTabChildren.setType(4);
-                    bankTabChildren.setTextShadowed(true);
-                    clientThread.invoke(bankTabChildren::revalidate);
-                    if (widgetType != 4) {
-                        bankTabChildren.setOriginalX(getChildX - 3);
-                        clientThread.invoke(bankTabChildren::revalidate);
+            Widget firstTab = bankTabCont.getChild(11);
+            if (firstTab != null) {
+                for (int i = 11; i < 20; i++) {
+                    Widget bankTabChild = bankTabCont.getChild(i);
+                    if (bankTabChild != null) {
+                        int getChildX = (bankTabChild.getOriginalX());
+                        int widgetType = bankTabChild.getType();
+
+                        if (bankTabChild.getActions() != null) {
+                            // Don't change anything about the New Tab button
+                            if (Arrays.asList(bankTabChild.getActions()).contains("New tab")) {
+                                continue;
+                            }
+                        }
+
+                        if (widgetType == 4 && bankTabChild.getHeight() != 35) {
+                            continue;
+                        }
+
+                        bankTabChild.setOpacity(0);
+                        bankTabChild.setOriginalY(0);
+                        bankTabChild.setXTextAlignment(1);
+                        bankTabChild.setYTextAlignment(1);
+                        bankTabChild.setOriginalWidth(41);
+                        bankTabChild.setOriginalHeight(40);
+                        bankTabChild.setOriginalHeight(40);
+                        bankTabChild.setItemId(-1);
+                        bankTabChild.setType(4);
+                        bankTabChild.setTextShadowed(true);
+
+                        if (widgetType != 4) {
+                            bankTabChild.setOriginalX(getChildX - 3);
+                        }
+
+                        clientThread.invoke(bankTabChild::revalidate);
                     }
                 }
-                replaceText();
-                clientThread.invokeLater(bankTabCont::revalidate);
-                return;
             }
             replaceText();
             clientThread.invokeLater(bankTabCont::revalidate);
