@@ -18,9 +18,10 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
 import java.awt.*;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -39,6 +40,11 @@ public class BankTabNamesPlugin extends Plugin {
 
     @Inject
     private BankTabNamesConfig config;
+
+    private final Map<String, Supplier<Boolean>> tabDisablesConfig = new HashMap<>();
+    private final Map<String, Supplier<String>> tabNameConfig = new HashMap<>();
+    private final Map<String, Supplier<TabFonts>> tabFontsConfig = new HashMap<>();
+    private final Map<String, Supplier<Color>> tabFontColorConfig = new HashMap<>();
 
     private static final int TAB_MAX_LENGTH = 15;
 
@@ -61,6 +67,7 @@ public class BankTabNamesPlugin extends Plugin {
 
     @Override
     protected void startUp() {
+        setupConfigMaps();
         clientThread.invoke(this::preformatBankTabs);
     }
 
@@ -83,11 +90,18 @@ public class BankTabNamesPlugin extends Plugin {
     private void preformatBankTabs() {
         final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
         if (bankTabCont != null) {
-            Widget firstTab = bankTabCont.getChild(11);
+            Widget firstTab = bankTabCont.getChild(10);
             if (firstTab != null) {
-                for (int i = 11; i < 20; i++) {
+                for (int i = 10; i < 20; i++) {
                     Widget bankTabChild = bankTabCont.getChild(i);
+
                     if (bankTabChild != null) {
+
+                        int tabIndex = i % 10;
+                        if (tabDisablesConfig.get("disableTab" + tabIndex).get()) {
+                            continue;
+                        }
+
                         int getChildX = (bankTabChild.getOriginalX());
                         int widgetType = bankTabChild.getType();
 
@@ -126,7 +140,6 @@ public class BankTabNamesPlugin extends Plugin {
         }
     }
 
-
     /**
      * This replaces the bank tabs with custom configuration
      */
@@ -136,52 +149,50 @@ public class BankTabNamesPlugin extends Plugin {
             for (int i = 10; i < 20; i++) {
                 Widget bankTabChild = bankTabCont.getChild(i);
                 if (bankTabChild != null) {
-                    Method tabNameMethod;
-                    Method tabFontIdMethod;
-                    Method tabTextColorMethod;
                     int tabIndex = i % 10;
-                    try {
-                        tabNameMethod = config.getClass().getMethod("tab" + tabIndex + "Name");
-                        tabFontIdMethod = config.getClass().getMethod("bankFont" + tabIndex);
-                        tabTextColorMethod = config.getClass().getMethod("bankFontColor" + tabIndex);
-                    } catch (NoSuchMethodException e) {
-                        throw new RuntimeException(e);
+
+                    if (tabDisablesConfig.get("disableTab" + tabIndex).get()) {
+                        continue;
                     }
 
-                    try {
-                        bankTabChild.setText((String) tabNameMethod.invoke(config));
-                        bankTabChild.setFontId(((TabFonts) tabFontIdMethod.invoke(config)).tabFontId);
-                        bankTabChild.setTextColor(((Color) tabTextColorMethod.invoke(config)).getRGB());
-                    } catch (IllegalAccessException | InvocationTargetException e) {
-                        throw new RuntimeException(e);
-                    }
+                    bankTabChild.setText(tabNameConfig.get("tab" + tabIndex + "Name").get());
+                    bankTabChild.setFontId(tabFontsConfig.get("bankFont" + tabIndex).get().tabFontId);
+                    bankTabChild.setTextColor(tabFontColorConfig.get("bankFontColor" + tabIndex).get().getRGB());
                 }
             }
-            Widget mainTab = bankTabCont.getChild(10);
+        }
+    }
 
-            if (mainTab != null) {
-                if (!config.disableMainTabName()) {
-                    mainTab.setType(4);
-                    mainTab.setOpacity(0);
-                    mainTab.setOriginalY(0);
-                    mainTab.setXTextAlignment(1);
-                    mainTab.setYTextAlignment(1);
-                    mainTab.setOriginalWidth(41);
-                    mainTab.setOriginalHeight(40);
-                    mainTab.setText(config.tab0Name());
-                    mainTab.setTextColor(config.bankFontColor0().getRGB());
-                    mainTab.setFontId(config.bankFont0().tabFontId);
-                }
+    private void setupConfigMaps() {
+        @SuppressWarnings("unchecked")
+        Supplier<Boolean>[] disableSuppliers = new Supplier[] {
+                config::disableTab0, config::disableTab1, config::disableTab2, config::disableTab3, config::disableTab4,
+                config::disableTab5, config::disableTab6, config::disableTab7, config::disableTab8, config::disableTab9
+        };
 
-                if (config.disableMainTabName()) {
-                    mainTab.setOpacity(20);
-                    mainTab.setType(5);
-                    mainTab.setOriginalWidth(36);
-                    mainTab.setOriginalHeight(32);
-                    mainTab.setOriginalY(4);
-                }
-                clientThread.invoke(mainTab::revalidate);
-            }
+        @SuppressWarnings("unchecked")
+        Supplier<String>[] nameSuppliers = new Supplier[] {
+                config::tab0Name, config::tab1Name, config::tab2Name, config::tab3Name, config::tab4Name,
+                config::tab5Name, config::tab6Name, config::tab7Name, config::tab8Name, config::tab9Name
+        };
+
+        @SuppressWarnings("unchecked")
+        Supplier<TabFonts>[] fontSuppliers = new Supplier[] {
+                config::bankFont0, config::bankFont1, config::bankFont2, config::bankFont3, config::bankFont4,
+                config::bankFont5, config::bankFont6, config::bankFont7, config::bankFont8, config::bankFont9
+        };
+
+        @SuppressWarnings("unchecked")
+        Supplier<Color>[] colorSuppliers = new Supplier[] {
+                config::bankFontColor0, config::bankFontColor1, config::bankFontColor2, config::bankFontColor3, config::bankFontColor4,
+                config::bankFontColor5, config::bankFontColor6, config::bankFontColor7, config::bankFontColor8, config::bankFontColor9
+        };
+
+        for (int i = 0; i <= 9; i++) {
+            tabDisablesConfig.put("disableTab" + i, disableSuppliers[i]);
+            tabNameConfig.put("tab" + i + "Name", nameSuppliers[i]);
+            tabFontsConfig.put("bankFont" + i, fontSuppliers[i]);
+            tabFontColorConfig.put("bankFontColor" + i, colorSuppliers[i]);
         }
     }
 }

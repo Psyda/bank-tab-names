@@ -87,10 +87,21 @@ public interface BankTabNamesConfig extends Config {
             name = "Keep Tab 0 Icon",
             description = "Keeps the Infinity Symbol for the Primary tab.",
             position = 10,
-            section = bankTabSection0
+            section = bankTabSection0,
+            hidden = true
     )
     default boolean disableMainTabName() {
         return false;
+    }
+    @ConfigItem(
+            keyName = "disableTab0",
+            name = "Keep Tab 0 Icon",
+            description = "Keeps the Infinity Symbol for the Primary tab.",
+            position = 10,
+            section = bankTabSection0
+    )
+    default boolean disableTab0() {
+        return disableMainTabName();
     }
 
     @ConfigItem(
@@ -129,6 +140,17 @@ public interface BankTabNamesConfig extends Config {
 
     // ---- BANK TAB DIVIDER ---- \\
     @ConfigItem(
+            keyName = "disableTab1",
+            name = "Disable For Tab",
+            description = "Disables the plugin for this tab.",
+            position = 10,
+            section = bankTabSection1
+    )
+    default boolean disableTab1() {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "bankFont1",
             name = "Font",
             description = "Select a font for each tab.",
@@ -163,6 +185,17 @@ public interface BankTabNamesConfig extends Config {
 
 
     // ---- BANK TAB DIVIDER ---- \\
+    @ConfigItem(
+            keyName = "disableTab2",
+            name = "Disable For Tab",
+            description = "Disables the plugin for this tab.",
+            position = 10,
+            section = bankTabSection2
+    )
+    default boolean disableTab2() {
+        return false;
+    }
+
     @ConfigItem(
             keyName = "bankFont2",
             name = "Font",
@@ -199,6 +232,17 @@ public interface BankTabNamesConfig extends Config {
 
     // ---- BANK TAB DIVIDER ---- \\
     @ConfigItem(
+            keyName = "disableTab3",
+            name = "Disable For Tab",
+            description = "Disables the plugin for this tab.",
+            position = 10,
+            section = bankTabSection3
+    )
+    default boolean disableTab3() {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "bankFont3",
             name = "Font",
             description = "Select a font for each tab.",
@@ -233,6 +277,17 @@ public interface BankTabNamesConfig extends Config {
 
 
     // ---- BANK TAB DIVIDER ---- \\
+    @ConfigItem(
+            keyName = "disableTab4",
+            name = "Disable For Tab",
+            description = "Disables the plugin for this tab.",
+            position = 10,
+            section = bankTabSection4
+    )
+    default boolean disableTab4() {
+        return false;
+    }
+
     @ConfigItem(
             keyName = "bankFont4",
             name = "Font",
@@ -269,6 +324,17 @@ public interface BankTabNamesConfig extends Config {
 
     // ---- BANK TAB DIVIDER ---- \\
     @ConfigItem(
+            keyName = "disableTab5",
+            name = "Disable For Tab",
+            description = "Disables the plugin for this tab.",
+            position = 10,
+            section = bankTabSection5
+    )
+    default boolean disableTab5() {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "bankFont5",
             name = "Font",
             description = "Select a font for each tab.",
@@ -303,6 +369,17 @@ public interface BankTabNamesConfig extends Config {
 
 
     // ---- BANK TAB DIVIDER ---- \\
+    @ConfigItem(
+            keyName = "disableTab6",
+            name = "Disable For Tab",
+            description = "Disables the plugin for this tab.",
+            position = 10,
+            section = bankTabSection6
+    )
+    default boolean disableTab6() {
+        return false;
+    }
+
     @ConfigItem(
             keyName = "bankFont6",
             name = "Font",
@@ -339,6 +416,17 @@ public interface BankTabNamesConfig extends Config {
 
     // ---- BANK TAB DIVIDER ---- \\
     @ConfigItem(
+            keyName = "disableTab7",
+            name = "Disable For Tab",
+            description = "Disables the plugin for this tab.",
+            position = 10,
+            section = bankTabSection7
+    )
+    default boolean disableTab7() {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "bankFont7",
             name = "Font",
             description = "Select a font for each tab.",
@@ -374,6 +462,17 @@ public interface BankTabNamesConfig extends Config {
 
     // ---- BANK TAB DIVIDER ---- \\
     @ConfigItem(
+            keyName = "disableTab8",
+            name = "Disable For Tab",
+            description = "Disables the plugin for this tab.",
+            position = 10,
+            section = bankTabSection8
+    )
+    default boolean disableTab8() {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "bankFont8",
             name = "Font",
             description = "Select a font for each tab.",
@@ -408,6 +507,17 @@ public interface BankTabNamesConfig extends Config {
 
 
     // ---- BANK TAB DIVIDER ---- \\
+    @ConfigItem(
+            keyName = "disableTab9",
+            name = "Disable For Tab",
+            description = "Disables the plugin for this tab.",
+            position = 10,
+            section = bankTabSection9
+    )
+    default boolean disableTab9() {
+        return false;
+    }
+
     @ConfigItem(
             keyName = "bankFont9",
             name = "Font",
