@@ -8,8 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.ScriptID;
 import net.runelite.api.events.ScriptPostFired;
+import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -77,7 +77,7 @@ public class BankTabNamesPlugin extends Plugin {
     }
 
     private void replaceBankTabNumbers() {
-        final Widget bankTabCont = client.getWidget(WidgetInfo.BANK_TAB_CONTAINER);
+        final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
         if (bankTabCont != null) {
             //Checking if Bank tab is on the "First item in Tab" OR the "Roman Numerals" Modes.
             if (bankTabCont.getChild(11).getType() == 5 || bankTabCont.getChild(11).getHeight() == 35) {
@@ -116,7 +116,7 @@ public class BankTabNamesPlugin extends Plugin {
 
 
     private void replaceText() {
-        final Widget bankTabCont = client.getWidget(WidgetInfo.BANK_TAB_CONTAINER);
+        final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
         if (bankTabCont != null) {
             bankTabCont.getChild(11).setText(config.tab1Name());
             bankTabCont.getChild(11).setText(config.tab1Name());
