@@ -1,6 +1,5 @@
 package psyda.banktabnames;
 
-import psyda.banktabnames.BankTabNamesPlugin;
 import net.runelite.client.RuneLite;
 import net.runelite.client.externalplugins.ExternalPluginManager;
 

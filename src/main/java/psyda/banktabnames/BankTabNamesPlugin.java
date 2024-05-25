@@ -17,6 +17,11 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
+import java.awt.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 @Slf4j
@@ -36,19 +41,24 @@ public class BankTabNamesPlugin extends Plugin {
     @Inject
     private BankTabNamesConfig config;
 
+    private final Map<String, Supplier<Boolean>> tabDisablesConfig = new HashMap<>();
+    private final Map<String, Supplier<String>> tabNameConfig = new HashMap<>();
+    private final Map<String, Supplier<TabFonts>> tabFontsConfig = new HashMap<>();
+    private final Map<String, Supplier<Color>> tabFontColorConfig = new HashMap<>();
+
     private static final int TAB_MAX_LENGTH = 15;
 
     private final int[] scriptIDs = {
-			ScriptID.BANKMAIN_BUILD,
-			ScriptID.BANKMAIN_INIT,
-			ScriptID.BANKMAIN_FINISHBUILDING,
-			ScriptID.BANKMAIN_SEARCH_REFRESH,
-			ScriptID.BANKMAIN_SEARCH_TOGGLE,
-			ScriptID.BANKMAIN_SIZE_CHECK,
-			3275,
-			276,
-			504
-	};
+            ScriptID.BANKMAIN_BUILD,
+            ScriptID.BANKMAIN_INIT,
+            ScriptID.BANKMAIN_FINISHBUILDING,
+            ScriptID.BANKMAIN_SEARCH_REFRESH,
+            ScriptID.BANKMAIN_SEARCH_TOGGLE,
+            ScriptID.BANKMAIN_SIZE_CHECK,
+            3275,
+            276,
+            504
+    };
 
     @Provides
     BankTabNamesConfig getConfig(ConfigManager configManager) {
@@ -56,120 +66,133 @@ public class BankTabNamesPlugin extends Plugin {
     }
 
     @Override
-    protected void startUp() throws Exception {
-        clientThread.invoke(this::replaceBankTabNumbers);
+    protected void startUp() {
+        setupConfigMaps();
+        clientThread.invoke(this::preformatBankTabs);
     }
 
     @Subscribe
     public void onConfigChanged(ConfigChanged event) {
-        replaceBankTabNumbers();
+        preformatBankTabs();
     }
 
     @Subscribe
     public void onScriptPostFired(ScriptPostFired scriptPostFired) {
         if (IntStream.of(scriptIDs).anyMatch(x -> x == scriptPostFired.getScriptId())) {
-			try {
-				replaceBankTabNumbers();
-			} catch (Exception exception) {
-				log.warn(String.valueOf(scriptPostFired.getScriptId()));
-			}
+            preformatBankTabs();
         }
     }
 
-    private void replaceBankTabNumbers() {
+    /**
+     * This loops over checking for different variables for each bank tab set in either mode and
+     * sets them accordingly so that each mode looks identical with tags on.
+     */
+    private void preformatBankTabs() {
         final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
         if (bankTabCont != null) {
-            //Checking if Bank tab is on the "First item in Tab" OR the "Roman Numerals" Modes.
-            if (bankTabCont.getChild(11).getType() == 5 || bankTabCont.getChild(11).getHeight() == 35) {
-                for (int i = 11; i < 20; i++) // This loops over checking for Different variables for each bank tab set in either mode and sets them accordingly so that each mode looks identical with tags on.
-                {
-                    Widget bankTabChildren = bankTabCont.getChild(i);
-                    int getChildX = (bankTabChildren.getOriginalX());
-                    int widgetType = bankTabCont.getChild(19).getType();
-                    if (widgetType == 4 && bankTabCont.getChild(19).getHeight() != 35) {
-                        continue;
-                    }
-                    bankTabChildren.setOpacity(0);
-                    bankTabChildren.setOriginalY(0);
-                    bankTabChildren.setXTextAlignment(1);
-                    bankTabChildren.setYTextAlignment(1);
-                    bankTabChildren.setOriginalWidth(41);
-                    bankTabChildren.setOriginalHeight(40);
-                    bankTabChildren.setOriginalHeight(40);
-                    bankTabChildren.setItemId(-1);
-                    bankTabChildren.setType(4);
-                    bankTabChildren.setTextShadowed(true);
-                    clientThread.invoke(bankTabChildren::revalidate);
-                    if (widgetType != 4) {
-                        bankTabChildren.setOriginalX(getChildX - 3);
-                        clientThread.invoke(bankTabChildren::revalidate);
+            Widget firstTab = bankTabCont.getChild(10);
+            if (firstTab != null) {
+                for (int i = 10; i < 20; i++) {
+                    Widget bankTabChild = bankTabCont.getChild(i);
+
+                    if (bankTabChild != null) {
+
+                        int tabIndex = i % 10;
+                        if (tabDisablesConfig.get("disableTab" + tabIndex).get()) {
+                            continue;
+                        }
+
+                        int getChildX = (bankTabChild.getOriginalX());
+                        int widgetType = bankTabChild.getType();
+
+                        if (bankTabChild.getActions() != null) {
+                            // Don't change anything about the New Tab button
+                            if (Arrays.asList(bankTabChild.getActions()).contains("New tab")) {
+                                continue;
+                            }
+                        }
+
+                        if (widgetType == 4 && bankTabChild.getHeight() != 35) {
+                            continue;
+                        }
+
+                        bankTabChild.setOpacity(0);
+                        bankTabChild.setOriginalY(0);
+                        bankTabChild.setXTextAlignment(1);
+                        bankTabChild.setYTextAlignment(1);
+                        bankTabChild.setOriginalWidth(41);
+                        bankTabChild.setOriginalHeight(40);
+                        bankTabChild.setOriginalHeight(40);
+                        bankTabChild.setItemId(-1);
+                        bankTabChild.setType(4);
+                        bankTabChild.setTextShadowed(true);
+
+                        if (widgetType != 4) {
+                            bankTabChild.setOriginalX(getChildX - 3);
+                        }
+
+                        clientThread.invoke(bankTabChild::revalidate);
                     }
                 }
-                replaceText();
-                clientThread.invokeLater(bankTabCont::revalidate);
-                return;
             }
             replaceText();
             clientThread.invokeLater(bankTabCont::revalidate);
         }
     }
 
-
+    /**
+     * This replaces the bank tabs with custom configuration
+     */
     private void replaceText() {
         final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
         if (bankTabCont != null) {
-            bankTabCont.getChild(11).setText(config.tab1Name());
-            bankTabCont.getChild(11).setText(config.tab1Name());
-            bankTabCont.getChild(12).setText(config.tab2Name());
-            bankTabCont.getChild(13).setText(config.tab3Name());
-            bankTabCont.getChild(14).setText(config.tab4Name());
-            bankTabCont.getChild(15).setText(config.tab5Name());
-            bankTabCont.getChild(16).setText(config.tab6Name());
-            bankTabCont.getChild(17).setText(config.tab7Name());
-            bankTabCont.getChild(18).setText(config.tab8Name());
-            bankTabCont.getChild(19).setText(config.tab9Name());
+            for (int i = 10; i < 20; i++) {
+                Widget bankTabChild = bankTabCont.getChild(i);
+                if (bankTabChild != null) {
+                    int tabIndex = i % 10;
 
-            bankTabCont.getChild(11).setFontId(config.bankFont1().tabFontId);
-            bankTabCont.getChild(12).setFontId(config.bankFont2().tabFontId);
-            bankTabCont.getChild(13).setFontId(config.bankFont3().tabFontId);
-            bankTabCont.getChild(14).setFontId(config.bankFont4().tabFontId);
-            bankTabCont.getChild(15).setFontId(config.bankFont5().tabFontId);
-            bankTabCont.getChild(16).setFontId(config.bankFont6().tabFontId);
-            bankTabCont.getChild(17).setFontId(config.bankFont7().tabFontId);
-            bankTabCont.getChild(18).setFontId(config.bankFont8().tabFontId);
-            bankTabCont.getChild(19).setFontId(config.bankFont9().tabFontId);
+                    if (tabDisablesConfig.get("disableTab" + tabIndex).get()) {
+                        continue;
+                    }
 
-            bankTabCont.getChild(11).setTextColor(config.bankFontColor1().getRGB());
-            bankTabCont.getChild(12).setTextColor(config.bankFontColor2().getRGB());
-            bankTabCont.getChild(13).setTextColor(config.bankFontColor3().getRGB());
-            bankTabCont.getChild(14).setTextColor(config.bankFontColor4().getRGB());
-            bankTabCont.getChild(15).setTextColor(config.bankFontColor5().getRGB());
-            bankTabCont.getChild(16).setTextColor(config.bankFontColor6().getRGB());
-            bankTabCont.getChild(17).setTextColor(config.bankFontColor7().getRGB());
-            bankTabCont.getChild(18).setTextColor(config.bankFontColor8().getRGB());
-            bankTabCont.getChild(19).setTextColor(config.bankFontColor9().getRGB());
-
-            if (!config.disableMainTabName()) {
-                bankTabCont.getChild(10).setType(4);
-                bankTabCont.getChild(10).setOpacity(0);
-                bankTabCont.getChild(10).setOriginalY(0);
-                bankTabCont.getChild(10).setXTextAlignment(1);
-                bankTabCont.getChild(10).setYTextAlignment(1);
-                bankTabCont.getChild(10).setOriginalWidth(41);
-                bankTabCont.getChild(10).setOriginalHeight(40);
-                bankTabCont.getChild(10).setText(config.tab0Name());
-                bankTabCont.getChild(10).setTextColor(config.bankFontColor0().getRGB());
-                bankTabCont.getChild(10).setFontId(config.bankFont0().tabFontId);
-                clientThread.invoke(bankTabCont.getChild(10)::revalidate);
+                    bankTabChild.setText(tabNameConfig.get("tab" + tabIndex + "Name").get());
+                    bankTabChild.setFontId(tabFontsConfig.get("bankFont" + tabIndex).get().tabFontId);
+                    bankTabChild.setTextColor(tabFontColorConfig.get("bankFontColor" + tabIndex).get().getRGB());
+                }
             }
-            if (config.disableMainTabName()) {
-                bankTabCont.getChild(10).setOpacity(20);
-                bankTabCont.getChild(10).setType(5);
-                bankTabCont.getChild(10).setOriginalWidth(36);
-                bankTabCont.getChild(10).setOriginalHeight(32);
-                bankTabCont.getChild(10).setOriginalY(4);
-                clientThread.invoke(bankTabCont.getChild(10)::revalidate);
-            }
+        }
+    }
+
+    private void setupConfigMaps() {
+        @SuppressWarnings("unchecked")
+        Supplier<Boolean>[] disableSuppliers = new Supplier[] {
+                config::disableTab0, config::disableTab1, config::disableTab2, config::disableTab3, config::disableTab4,
+                config::disableTab5, config::disableTab6, config::disableTab7, config::disableTab8, config::disableTab9
+        };
+
+        @SuppressWarnings("unchecked")
+        Supplier<String>[] nameSuppliers = new Supplier[] {
+                config::tab0Name, config::tab1Name, config::tab2Name, config::tab3Name, config::tab4Name,
+                config::tab5Name, config::tab6Name, config::tab7Name, config::tab8Name, config::tab9Name
+        };
+
+        @SuppressWarnings("unchecked")
+        Supplier<TabFonts>[] fontSuppliers = new Supplier[] {
+                config::bankFont0, config::bankFont1, config::bankFont2, config::bankFont3, config::bankFont4,
+                config::bankFont5, config::bankFont6, config::bankFont7, config::bankFont8, config::bankFont9
+        };
+
+        @SuppressWarnings("unchecked")
+        Supplier<Color>[] colorSuppliers = new Supplier[] {
+                config::bankFontColor0, config::bankFontColor1, config::bankFontColor2, config::bankFontColor3, config::bankFontColor4,
+                config::bankFontColor5, config::bankFontColor6, config::bankFontColor7, config::bankFontColor8, config::bankFontColor9
+        };
+
+        for (int i = 0; i <= 9; i++) {
+            tabDisablesConfig.put("disableTab" + i, disableSuppliers[i]);
+            tabNameConfig.put("tab" + i + "Name", nameSuppliers[i]);
+            tabFontsConfig.put("bankFont" + i, fontSuppliers[i]);
+            tabFontColorConfig.put("bankFontColor" + i, colorSuppliers[i]);
         }
     }
 }
