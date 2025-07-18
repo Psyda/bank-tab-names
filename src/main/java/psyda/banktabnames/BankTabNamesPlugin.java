@@ -1,5 +1,6 @@
 package psyda.banktabnames;
 
+import com.google.inject.Injector;
 import com.google.inject.Provides;
 
 import javax.inject.Inject;
@@ -7,8 +8,10 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.ScriptID;
+import net.runelite.api.annotations.Interface;
 import net.runelite.api.events.ScriptPostFired;
-import net.runelite.api.widgets.ComponentID;
+//import net.runelite.api.widgets.ComponentID;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -16,8 +19,16 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.ui.NavigationButton;
+import net.runelite.client.util.ImageUtil;
+
+import javax.swing.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,12 +52,25 @@ public class BankTabNamesPlugin extends Plugin {
     @Inject
     private BankTabNamesConfig config;
 
+    @Inject
+    private ConfigManager configManager;
+
+    @Inject
+    private ClientToolbar clientToolbar;
+
+    @Inject
+    private Injector injector;
+
+    private BankTabNamesPanel panel;
+    private NavigationButton navButton;
+
     private final Map<String, Supplier<Boolean>> tabDisablesConfig = new HashMap<>();
     private final Map<String, Supplier<String>> tabNameConfig = new HashMap<>();
     private final Map<String, Supplier<TabFonts>> tabFontsConfig = new HashMap<>();
-    private final Map<String, Supplier<Color>> tabFontColorConfig = new HashMap<>();
+    // Removed tabFontColorConfig as colors are now handled by the panel
 
-    private static final int TAB_MAX_LENGTH = 15;
+//todo:remove?
+    //private static final int TAB_MAX_LENGTH = 15;
 
     private final int[] scriptIDs = {
             ScriptID.BANKMAIN_BUILD,
@@ -69,10 +93,31 @@ public class BankTabNamesPlugin extends Plugin {
     protected void startUp() {
         setupConfigMaps();
         clientThread.invoke(this::preformatBankTabs);
+
+        panel = injector.getInstance(BankTabNamesPanel.class);
+        panel.init();
+
+        final BufferedImage icon = ImageUtil.loadImageResource(getClass(), "/bank-tab-icon.png");
+        navButton = NavigationButton.builder()
+                .tooltip("Bank Tab Names")
+                .icon(icon)
+                .priority(5)
+                .panel(panel)
+                .build();
+
+        clientToolbar.addNavigation(navButton);
+    }
+
+    @Override
+    protected void shutDown() {
+        clientToolbar.removeNavigation(navButton);
     }
 
     @Subscribe
     public void onConfigChanged(ConfigChanged event) {
+        if (!event.getGroup().equals("BankTabNames")) {
+            return;
+        }
         preformatBankTabs();
     }
 
@@ -83,12 +128,44 @@ public class BankTabNamesPlugin extends Plugin {
         }
     }
 
+
+
+    public String getTabName(int tabIndex) {
+        if (tabIndex < 0 || tabIndex > 9) {
+            return "";
+        }
+        return tabNameConfig.get("tab" + tabIndex + "Name").get();
+    }
+
+    public TabFonts getTabFont(int tabIndex) {
+        if (tabIndex < 0 || tabIndex > 9) {
+            return TabFonts.QUILL_8;
+        }
+        return tabFontsConfig.get("bankFont" + tabIndex).get();
+    }
+
+    public Color getTabColor(int tabIndex) {
+        if (tabIndex < 0 || tabIndex > 9) {
+            return Color.WHITE;
+        }
+        // Always return white since colors are now handled by the panel via color tags
+        return Color.WHITE;
+    }
+
+    public boolean isTabDisabled(int tabIndex) {
+        if (tabIndex < 0 || tabIndex > 9) {
+            return false;
+        }
+        return tabDisablesConfig.get("disableTab" + tabIndex).get();
+    }
+
     /**
      * This loops over checking for different variables for each bank tab set in either mode and
      * sets them accordingly so that each mode looks identical with tags on.
      */
     private void preformatBankTabs() {
-        final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
+//        final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
+        final Widget bankTabCont = client.getWidget(InterfaceID.Bankmain.TABS);
         if (bankTabCont != null) {
             Widget firstTab = bankTabCont.getChild(10);
             if (firstTab != null) {
@@ -144,7 +221,8 @@ public class BankTabNamesPlugin extends Plugin {
      * This replaces the bank tabs with custom configuration
      */
     private void replaceText() {
-        final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
+//        final Widget bankTabCont = client.getWidget(ComponentID.BANK_TAB_CONTAINER);
+        final Widget bankTabCont = client.getWidget(InterfaceID.Bankmain.TABS);
         if (bankTabCont != null) {
             for (int i = 10; i < 20; i++) {
                 Widget bankTabChild = bankTabCont.getChild(i);
@@ -157,7 +235,8 @@ public class BankTabNamesPlugin extends Plugin {
 
                     bankTabChild.setText(tabNameConfig.get("tab" + tabIndex + "Name").get());
                     bankTabChild.setFontId(tabFontsConfig.get("bankFont" + tabIndex).get().tabFontId);
-                    bankTabChild.setTextColor(tabFontColorConfig.get("bankFontColor" + tabIndex).get().getRGB());
+                    // Use white color as default - colors are now handled by color tags in the text
+                    bankTabChild.setTextColor(Color.WHITE.getRGB());
                 }
             }
         }
@@ -182,17 +261,10 @@ public class BankTabNamesPlugin extends Plugin {
                 config::bankFont5, config::bankFont6, config::bankFont7, config::bankFont8, config::bankFont9
         };
 
-        @SuppressWarnings("unchecked")
-        Supplier<Color>[] colorSuppliers = new Supplier[] {
-                config::bankFontColor0, config::bankFontColor1, config::bankFontColor2, config::bankFontColor3, config::bankFontColor4,
-                config::bankFontColor5, config::bankFontColor6, config::bankFontColor7, config::bankFontColor8, config::bankFontColor9
-        };
-
         for (int i = 0; i <= 9; i++) {
             tabDisablesConfig.put("disableTab" + i, disableSuppliers[i]);
             tabNameConfig.put("tab" + i + "Name", nameSuppliers[i]);
             tabFontsConfig.put("bankFont" + i, fontSuppliers[i]);
-            tabFontColorConfig.put("bankFontColor" + i, colorSuppliers[i]);
         }
     }
 }
