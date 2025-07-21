@@ -22,7 +22,7 @@ public class IconSpriteExtractor {
     @Inject
     private ClientThread clientThread;
 
-    private Map<Integer, BufferedImage> extractedIcons = new HashMap<>();
+    private final Map<Integer, BufferedImage> extractedIcons = new HashMap<>();
     private boolean isExtracting = false;
 
     public CompletableFuture<Void> extractAllImages() {
@@ -35,9 +35,9 @@ public class IconSpriteExtractor {
             clientThread.invoke(() -> {
                 try {
                     isExtracting = true;
-                    log.info("Starting icon extraction...");
+                    log.debug("Starting icon extraction...");
                     extractIcons();
-                    log.info("Icon extraction completed. Extracted {} icons", extractedIcons.size());
+                    log.debug("Icon extraction completed. Extracted {} icons", extractedIcons.size());
                 } catch (Exception e) {
                     log.error("Error during icon extraction", e);
                 } finally {
@@ -96,7 +96,7 @@ public class IconSpriteExtractor {
                     int pixelIndex = y * width + x;
                     if (pixelIndex < pixels.length) {
                         int paletteIndex = pixels[pixelIndex] & 0xFF;
-                        if (paletteIndex < palette.length && paletteIndex > 0) {
+                        if (paletteIndex < palette.length && paletteIndex > 0) { //Todo: Improve implementation, Something about the logic seems off
                             int color = palette[paletteIndex];
                             if (paletteIndex == 0) {
                                 color = 0x00000000; // Transparent
@@ -119,10 +119,6 @@ public class IconSpriteExtractor {
 
     public BufferedImage getIcon(int iconId) {
         return extractedIcons.get(iconId);
-    }
-
-    public boolean isExtracting() {
-        return isExtracting;
     }
 
     public static BufferedImage createPlaceholderImage(int id, int width, int height) {

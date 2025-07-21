@@ -1,6 +1,6 @@
 package psyda.banktabnames;
 
-import com.google.inject.Injector;
+
 import com.google.inject.Provides;
 
 import javax.inject.Inject;
@@ -8,9 +8,7 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.ScriptID;
-import net.runelite.api.annotations.Interface;
 import net.runelite.api.events.ScriptPostFired;
-//import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
@@ -58,9 +56,6 @@ public class BankTabNamesPlugin extends Plugin {
     @Inject
     private ClientToolbar clientToolbar;
 
-    @Inject
-    private Injector injector;
-
     private BankTabNamesPanel panel;
     private NavigationButton navButton;
 
@@ -94,7 +89,7 @@ public class BankTabNamesPlugin extends Plugin {
         setupConfigMaps();
         clientThread.invoke(this::preformatBankTabs);
 
-        panel = injector.getInstance(BankTabNamesPanel.class);
+        panel = getInjector().getInstance(BankTabNamesPanel.class);
         panel.init();
 
         final BufferedImage icon = ImageUtil.loadImageResource(getClass(), "/bank-tab-icon.png");
@@ -126,37 +121,6 @@ public class BankTabNamesPlugin extends Plugin {
         if (IntStream.of(scriptIDs).anyMatch(x -> x == scriptPostFired.getScriptId())) {
             preformatBankTabs();
         }
-    }
-
-
-
-    public String getTabName(int tabIndex) {
-        if (tabIndex < 0 || tabIndex > 9) {
-            return "";
-        }
-        return tabNameConfig.get("tab" + tabIndex + "Name").get();
-    }
-
-    public TabFonts getTabFont(int tabIndex) {
-        if (tabIndex < 0 || tabIndex > 9) {
-            return TabFonts.QUILL_8;
-        }
-        return tabFontsConfig.get("bankFont" + tabIndex).get();
-    }
-
-    public Color getTabColor(int tabIndex) {
-        if (tabIndex < 0 || tabIndex > 9) {
-            return Color.WHITE;
-        }
-        // Always return white since colors are now handled by the panel via color tags
-        return Color.WHITE;
-    }
-
-    public boolean isTabDisabled(int tabIndex) {
-        if (tabIndex < 0 || tabIndex > 9) {
-            return false;
-        }
-        return tabDisablesConfig.get("disableTab" + tabIndex).get();
     }
 
     /**

@@ -763,13 +763,6 @@ public class BankTabNamesPanel extends PluginPanel {
         }
     }
 
-// Refresh Bank tabs - Might not be necessary
-//    public void refreshAllTabs() {
-//        loadConfigValues();
-//        updateAllPreviews();
-//        updateAllSelections();
-//    }
-
     private void updatePresetDropdown() {
         if (presetCombo == null) return;
 
