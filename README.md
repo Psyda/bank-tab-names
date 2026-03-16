@@ -1,128 +1,143 @@
-
 # Bank Tab Names
 
-A RuneLite plugin that lets you customize your bank tabs with styled names, colors, icons, and multiple fonts. Transform your banking experience with personalized tab organization!
+<img width="760" height="340" alt="image" src="https://github.com/user-attachments/assets/949d11d4-6e4f-4b6e-a92a-e79642736993" />
 
-## ✨ Features
 
-- **Custom Tab Names**: Replace default bank tab icons with personalized text
-- **Rich Text Formatting**: Use colors, line breaks, and icons within tab names
-- **Multiple Fonts**: Choose from 13 different font styles including QUILL, BARBARIAN, VERDANA, and more
-- **Icon Library**: Access 200+ game icons to enhance your tab designs
-- **Color Palette**: Quick-access color picker with 32 preset colors
-- **Built-in Presets**: Ready-made configurations for different account types
-- **Custom Presets**: Save and share your own tab configurations
-- **Live Preview**: See exactly how your tabs will look before applying
+A RuneLite plugin for customizing bank tabs with styled text, icons, game sprites, and manual layout controls.
 
-## 📦 Installation
+## Features
 
-1. Open RuneLite and go to the Plugin Hub
-2. Search for "Bank Tab Names"
-3. Install and enable the plugin
-4. Click the Bank Tab Names icon in the sidebar to open the configuration panel
+### Text
 
-## 🎮 Usage
+Each tab can display custom text with color formatting and line breaks. Twelve fonts are available, ranging from the small Quill 8 to Verdana 15. Text supports inline color tags (`<col=HEX>`) and line breaks (`<br>`). A color palette in the side panel lets you insert color tags by clicking.
 
-### Basic Usage
-1. Open the Bank Tab Names panel from the RuneLite sidebar
-2. Click on any tab row to select it
-3. Type your desired name in the text field
-4. Choose a font from the dropdown
-5. Use the checkbox to enable/disable custom styling for each tab
-6. Your changes are saved automatically!
+Text can be edited in two ways: through the plugin's side panel text field (where tags are visible as literal text), or through the in-game chatbox input by right-clicking a bank tab and selecting "Edit text."
 
-### Adding Colors
-- Click any color button to add a color tag at your cursor position
-- Colors are added as `<col=HEXCODE>` tags
-- Use `</col>` to end color formatting
+You can also edit and add images by right-clicking a tab natively iname. There are many options for how you can approach customization. I've taken a lot of the limitations on creativity away to allow for a lot of flexibility and creative expression.
 
-### Adding Icons
-- Click any icon in the icon grid to add it at your cursor position
-- Icons are added as `<img=ID>` tags
-- Over 200 game icons available
 
-### Line Breaks
-- Press **Enter** in the text fields to add `<br>` line break tags
-- Perfect for multi-line tab names, works mest with `PLAIN_11` font!
+### Icons
 
-## 🎨 Built-in Presets
+Tabs support multiple icons simultaneously, arranged left-to-right across the tab area. Four icon types are available:
 
-The plugin includes professionally designed presets!:
+- **Item icons** searched through the standard RuneLite item search
+- **Skill icons** from the full skill grid
+- **Game sprites** from a curated category browser (Arrows, Creatures, Emotes, Labels, Leagues, Overheads, Prayer, Runes, Spells, Teleports, UI Icons, and more) or by entering a sprite archive ID and frame directly
+- **Custom icons** loaded from PNG files in the user icons folder
 
-- **Ironman**: Optimized for ironman accounts with efficient categorization
-- **Main**: Perfect for main accounts with combat and skilling focus
-- **PVP**: Designed for player vs player activities and gear management
-- **Skiller**: Tailored for skilling-focused accounts
-- **Efficient**: Advanced multi-line layouts for maximum organization
-- **Colorful**: Vibrant designs showcasing advanced formatting
+Icons are added through the right-click menu on any bank tab. The plugin panel also shows an "Edit" button on each tab row that opens the icon editor when icons are present.
 
-## 🛠️ Advanced Features
+### Icon Editor
 
-### XML Tags
+Each icon has individual controls:
+
+- **Width and height** with a link button that locks the aspect ratio for proportional resizing
+- **Auto sizing** that uses the sprite's real canvas dimensions (including transparent padding) for accurate rendering
+- **X and Y offset** with no bounds clamping, allowing icons to extend beyond the tab area for decorative purposes
+- **Z-index** controlling render priority (higher values draw on top)
+- **Reorder** buttons to rearrange icons left-to-right
+- **Delete** button per icon
+
+The editor scrolls when more than a few icons are configured, preventing the panel from forcing the client window larger.
+
+<img width="3840" height="2160" alt="image" src="https://github.com/user-attachments/assets/bb2c0de4-dfc2-4718-abd1-e1cee27b2b11" />
+
+<img width="2233" height="1207" alt="image" src="https://github.com/user-attachments/assets/f1651b33-65d2-43b4-afe9-a3453dcae53e" />
+
+
+### Fit Toggle
+
+A per-tab "Fit" checkbox in the icon editor controls how icons and text interact. When enabled (default), icons shift upward and text aligns to the bottom, keeping them separated. When disabled, all icons stack at the center position and text centers over them. This is intended for designs where a sprite covers the entire tab area as a background, with text overlaid on top. Z-index controls which icon draws in front when stacking.
+
+### Rendering
+
+All overlays (icons, text, drag ghost) are rendered on the top-level bank container (`Bankmain.INFINITE`) rather than the tab bar widget. This means icons and text are not clipped by the tab bar boundaries and can extend freely in any direction using offsets.
+
+Game sprite sizing uses `SpritePixels.getMaxWidth()` and `getMaxHeight()` from the client's sprite archive to get the full canvas dimensions including transparent padding. This prevents the squishing that occurs when using `SpriteManager.getSprite()`, which trims transparent pixels and returns smaller dimensions than the engine actually renders.
+
+Overlays hide automatically when the bank settings page is open.
+
+### Panel Visibility
+
+Three modes are available in the plugin's RuneLite config:
+
+- **Default**: the panel is always available in the sidebar
+- **Hide side panel**: removes the panel from the sidebar entirely. It temporarily appears when you use any Edit or Add action from a bank tab's right-click menu, then hides again when the bank closes.
+- **Only show while in bank**: the panel appears when you open the bank and disappears when you close it.
+
+### Drag-to-Rearrange
+
+Tab designs can be reordered by dragging tabs in the bank. A ghost overlay follows the cursor showing the tab's text. Dropping on a different tab swaps both designs.
+
+### Config Presets
+
+This wouldn't be a great plugin if you couldn't share your configs with others, just make sure to also share you image files so they can utilize them too! Tab layouts can be saved as named presets, loaded, and deleted from the side panel. Presets store all ten tabs including text, font, enabled state, icons with their sizing and offsets, fit toggle, and z-index values.
+
+### Import and Export
+
+Configs can be exported to clipboard or file as JSON, and imported from clipboard or file. The exported JSON includes a version number for forward compatibility. When importing a config created on an older plugin version, a warning appears (dismissible with "Don't show again") noting that placement or sizing may need adjusting.
+
+The import system supports both the current format (name, version, and tab data wrapper) and the legacy flat format (direct tab map) for backwards compatibility.
+
+### Custom Icons
+
+The plugin scans a user icons folder for PNG files and makes them available in the custom icon picker. Bundled icons are included with the plugin. The "Reload icons" button rescans the folder and refreshes the panel immediately. The "Open folder" button opens the user icons directory on disk.
+
+Custom icon sprite IDs are mapped by filename and persist for the session, so reloading does not shuffle IDs or break existing tab configurations.
+
+## Configuration
+
+The following settings are available in RuneLite's plugin configuration panel:
+
+| Setting | Description |
+|---|---|
+| Hide side panel | Removes the panel from the sidebar |
+| Only show panel while in bank | Auto-shows on bank open, hides on close |
+| Suppress import version warning | Disables the version mismatch dialog on import |
+| Suppress tag help popup | Disables the text tag reference popup on first Edit Text use |
+
+## Tags Reference
+
+| Tag | Effect |
+|---|---|
+| `<br>` | Line break |
+| `<col=HEX>` | Set text color (e.g. `<col=FF0000>` for red) |
+| `</col>` | Reset to white |
+
+In the side panel text field, pressing Enter inserts a `<br>` tag automatically.
+
+## Fonts
+
+| Name | Size |
+|---|---|
+| Quill 8 | Small (default) |
+| Quill Medium | Medium |
+| Plain 11 | Standard |
+| Plain 12 | Standard |
+| Bold 12 | Standard bold |
+| Barbarian | Decorative |
+| Surok | Decorative |
+| Verdana 11 | Clean |
+| Verdana 11 Bold | Clean bold |
+| Tahoma 11 | Clean |
+| Verdana 13 | Large |
+| Verdana 13 Bold | Large bold |
+| Verdana 15 | Largest |
+
+## Building
+
+This is a standard RuneLite plugin. Clone the repository and build with Gradle:
+
 ```
-<col=FF0000>Red Text</col>          <!-- Colored text -->
-<img=45>                            <!-- Insert icon with ID 45 -->
-<br>                                <!-- Line break -->
-<col=00FF00>Green<br>Line 2</col>   <!-- Multi-line colored text -->
+./gradlew build
 ```
 
-### Font Options
-- `PLAIN_11` / `PLAIN_12` - Clean, readable fonts
-- `BOLD_12` - Bold emphasis
-- `QUILL_8` / `QUILL_MEDIUM` - Classic RuneScape style
-- `BARBARIAN` - Decorative fantasy font
-- `VERDANA_11` through `VERDANA_15` - Modern, crisp fonts
-- `TAHOMA_11` - Compact, professional font
+## Support
 
-### Custom Presets
-- Save your current configuration as a custom preset
-- Share preset names with friends
-- Overwrite existing custom presets
-- Remove unwanted custom presets
+- [GitHub Issues](https://github.com/psyda/bank-tab-names/issues)
+- [Patreon](https://patreon.com/psyda)
+- [PayPal](https://paypal.me/mintyfresh)
 
-## 📸 Examples
+More pics:
 
-Hardcore Ironman icon replacing the default ∞ symbol.
-Tab 0: `<img=10>` 
-
-Red HEX code color for "Combat" text
-Tab 1: `<col=FF0000>Combat`           
-
-Green "Gear" and cyan "Tools" on separate lines use <br> to break the lines
-Tab 2: `<col=00FF00>Gear<br><col=00FFFF>Tools`  
-
-Iron Sword icon with purple "Slayer" text below
-Tab 3: `<img=45><br><col=800080>Slayer`         
-
-## 🎯 Tips
-
-- **Live Editing**: Edit your tabs while your bank is open to see changes in real-time
-- **Font Preview**: The preview panel shows text formatting but not fonts - use live editing for font preview
-- **Color Codes**: Use any 6-digit hex color code for unlimited color options
-- **Icon Discovery**: Hover over icons to see their ID numbers
-- **Backup**: Save your favorite configurations as custom presets before experimenting
-
-## 🤝 Support
-
-- **GitHub**: [Report issues or contribute](https://github.com/psyda/bank-tab-names)
-
-- **In-Game**: Find `Psyda` on discord to have your tab preset added as an official ingame preset, or add 'd1x' or 'Iron d1x' ingame if you want to chat!
-
-## 📝 Version History
-
-### 2.0.0
-- Complete UI redesign with intuitive panel interface
-- Added preset system with 6 built-in configurations
-- Expanded icon library to 200+ icons
-- Enhanced color picker with 32 preset colors
-- Custom preset saving and management
-- Live preview system
-- Multiple font support
-- Improved stability and performance
-
-### 1.0.0
-- Initial release with basic tab naming functionality
-
----
-
-**Created by Psyda** | Transform your banking experience today!
+<img width="2062" height="1048" alt="image" src="https://github.com/user-attachments/assets/62cedcba-e2d3-4aba-bc87-ea1bc8ec14fd" />
