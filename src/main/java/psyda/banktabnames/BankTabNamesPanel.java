@@ -103,6 +103,7 @@ public class BankTabNamesPanel extends PluginPanel
 	public void init(BankTabNamesPlugin plugin)
 	{
 		this.plugin = plugin;
+		this.configGson = plugin.getGson().newBuilder().setPrettyPrinting().create();
 		tabRows.clear();
 		removeAll();
 		setLayout(new BorderLayout());
@@ -1371,7 +1372,7 @@ public class BankTabNamesPanel extends PluginPanel
 	// Config Presets (saved configs)
 	// -----------------------------------------------------------------------
 
-	private static final Gson CONFIG_GSON = new GsonBuilder().setPrettyPrinting().create();
+	private Gson configGson;
 
 	/**
 	 * Type token for the outer map: preset name -> tab map.
@@ -1397,7 +1398,7 @@ public class BankTabNamesPanel extends PluginPanel
 			try
 			{
 				LinkedHashMap<String, LinkedHashMap<String, TabConfig>> map =
-						CONFIG_GSON.fromJson(json, PRESETS_MAP_TYPE);
+						configGson.fromJson(json, PRESETS_MAP_TYPE);
 				if (map != null)
 				{
 					return map;
@@ -1416,7 +1417,7 @@ public class BankTabNamesPanel extends PluginPanel
 	 */
 	private void saveAllPresets(LinkedHashMap<String, LinkedHashMap<String, TabConfig>> presets)
 	{
-		String json = CONFIG_GSON.toJson(presets);
+		String json = configGson.toJson(presets);
 		plugin.getConfigManager().setConfiguration(
 				BankTabNamesPlugin.CONFIG_GROUP, SAVED_CONFIGS_KEY, json);
 	}
@@ -1608,7 +1609,7 @@ public class BankTabNamesPanel extends PluginPanel
 		exportWrapper.put("name", name);
 		exportWrapper.put("version", plugin.getConfigVersion());
 		exportWrapper.put("tabs", serializeCurrentTabs());
-		String json = CONFIG_GSON.toJson(exportWrapper);
+		String json = configGson.toJson(exportWrapper);
 
 		String[] options = {"Copy to clipboard", "Save to file", "Cancel"};
 		int choice = JOptionPane.showOptionDialog(this,
@@ -1741,7 +1742,7 @@ public class BankTabNamesPanel extends PluginPanel
 				if (root.has("name") && root.has("tabs"))
 				{
 					presetName = root.get("name").getAsString();
-					tabMap = CONFIG_GSON.fromJson(root.get("tabs"), TAB_MAP_TYPE);
+					tabMap = configGson.fromJson(root.get("tabs"), TAB_MAP_TYPE);
 
 					if (root.has("version"))
 					{
@@ -1757,7 +1758,7 @@ public class BankTabNamesPanel extends PluginPanel
 			// Fall back to legacy flat format (direct tab_0..tab_9 map, version 0)
 			if (tabMap == null)
 			{
-				tabMap = CONFIG_GSON.fromJson(json, TAB_MAP_TYPE);
+				tabMap = configGson.fromJson(json, TAB_MAP_TYPE);
 				importVersion = 0;
 			}
 

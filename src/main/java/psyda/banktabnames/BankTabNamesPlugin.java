@@ -137,7 +137,7 @@ public class BankTabNamesPlugin extends Plugin
 	@Getter private BankTabNamesPanel panel;
 	private NavigationButton navButton;
 
-	private final Gson gson = new Gson();
+	@Getter @Inject private Gson gson;
 
 	/**
 	 * Reusable overlay widget pool per tab. Widgets are recycled across non-destructive
