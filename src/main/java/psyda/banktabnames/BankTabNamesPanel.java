@@ -343,14 +343,7 @@ public class BankTabNamesPanel extends PluginPanel
 		File dir = plugin.getCustomIconManager().getUserIconsDir();
 		if (dir != null && dir.exists())
 		{
-			try
-			{
-				java.awt.Desktop.getDesktop().open(dir);
-			}
-			catch (Exception e)
-			{
-				log.warn("Failed to open user icons folder", e);
-			}
+			LinkBrowser.open(dir.toString());
 		}
 	}
 
