@@ -35,7 +35,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -44,9 +43,9 @@ import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Skill;
+import net.runelite.client.RuneLite;
 import net.runelite.client.game.SpriteManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
@@ -75,6 +74,12 @@ public class BankTabNamesPanel extends PluginPanel
 	 * {name -> {tab_0: TabConfig, tab_1: TabConfig, ...}}.
 	 */
 	private static final String SAVED_CONFIGS_KEY = "saved_configs";
+
+	/**
+	 * Directory for file-based config import/export, under the plugin's own
+	 * folder in .runelite. All config file I/O is confined here.
+	 */
+	private static final File CONFIG_DIR = new File(RuneLite.RUNELITE_DIR, "banktabnames/configs");
 
 	/**
 	 * Guard flag to suppress listener-triggered saves while programmatically
@@ -345,6 +350,20 @@ public class BankTabNamesPanel extends PluginPanel
 		{
 			LinkBrowser.open(dir.toString());
 		}
+	}
+
+	/**
+	 * Opens the config import/export folder on disk, creating it first so the
+	 * button always lands on a real directory.
+	 */
+	private void openConfigFolder()
+	{
+		if (!CONFIG_DIR.exists() && !CONFIG_DIR.mkdirs())
+		{
+			log.warn("Failed to create config dir: {}", CONFIG_DIR.getAbsolutePath());
+			return;
+		}
+		LinkBrowser.open(CONFIG_DIR.toString());
 	}
 
 	// -----------------------------------------------------------------------
@@ -1623,34 +1642,46 @@ public class BankTabNamesPanel extends PluginPanel
 		}
 		else if (choice == 1)
 		{
-			JFileChooser chooser = new JFileChooser();
-			chooser.setDialogTitle("Save Bank Tab Names Config");
-			chooser.setSelectedFile(new File(name.replaceAll("[^a-zA-Z0-9_\\-]", "_") + ".json"));
-			chooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
-
-			if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION)
+			if (!CONFIG_DIR.exists() && !CONFIG_DIR.mkdirs())
 			{
-				File file = chooser.getSelectedFile();
-				if (!file.getName().endsWith(".json"))
-				{
-					file = new File(file.getAbsolutePath() + ".json");
-				}
-				try
-				{
-					Files.write(file.toPath(), json.getBytes(StandardCharsets.UTF_8));
-					JOptionPane.showMessageDialog(this,
-							"Config saved to " + file.getName(),
-							"Export Config",
-							JOptionPane.INFORMATION_MESSAGE);
-				}
-				catch (Exception e)
-				{
-					log.warn("Failed to export config", e);
-					JOptionPane.showMessageDialog(this,
-							"Failed to save file: " + e.getMessage(),
-							"Export Error",
-							JOptionPane.ERROR_MESSAGE);
-				}
+				log.warn("Failed to create config dir: {}", CONFIG_DIR.getAbsolutePath());
+				JOptionPane.showMessageDialog(this,
+						"Could not create config folder:\n" + CONFIG_DIR.getAbsolutePath(),
+						"Export Error",
+						JOptionPane.ERROR_MESSAGE);
+				return;
+			}
+
+			String safeName = name.replaceAll("[^a-zA-Z0-9_\\-]", "_") + ".json";
+			File file = new File(CONFIG_DIR, safeName);
+			try
+			{
+				Files.write(file.toPath(), json.getBytes(StandardCharsets.UTF_8));
+
+				JButton openFolderBtn = new JButton("Open Config Folder");
+				openFolderBtn.setAlignmentX(LEFT_ALIGNMENT);
+				openFolderBtn.addActionListener(ev -> openConfigFolder());
+
+				JLabel savedLabel = new JLabel("<html>Config saved to:<br>" + file.getAbsolutePath() + "</html>");
+				savedLabel.setAlignmentX(LEFT_ALIGNMENT);
+
+				JPanel savedPanel = new JPanel();
+				savedPanel.setLayout(new BoxLayout(savedPanel, BoxLayout.Y_AXIS));
+				savedPanel.add(savedLabel);
+				savedPanel.add(Box.createVerticalStrut(8));
+				savedPanel.add(openFolderBtn);
+
+				JOptionPane.showMessageDialog(this, savedPanel,
+						"Export Config",
+						JOptionPane.INFORMATION_MESSAGE);
+			}
+			catch (Exception e)
+			{
+				log.warn("Failed to export config", e);
+				JOptionPane.showMessageDialog(this,
+						"Failed to save file: " + e.getMessage(),
+						"Export Error",
+						JOptionPane.ERROR_MESSAGE);
 			}
 		}
 	}
@@ -1695,25 +1726,89 @@ public class BankTabNamesPanel extends PluginPanel
 		}
 		else if (choice == 1)
 		{
-			JFileChooser chooser = new JFileChooser();
-			chooser.setDialogTitle("Load Bank Tab Names Config");
-			chooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
-
-			if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION)
+			// Create the folder up front so the "Open Config Folder" button always
+			// lands somewhere real, and so first-time users have a place to drop files.
+			if (!CONFIG_DIR.exists() && !CONFIG_DIR.mkdirs())
 			{
-				try
-				{
-					json = new String(Files.readAllBytes(chooser.getSelectedFile().toPath()), StandardCharsets.UTF_8);
-				}
-				catch (Exception e)
-				{
-					log.warn("Failed to read config file", e);
-					JOptionPane.showMessageDialog(this,
-							"Failed to read file: " + e.getMessage(),
-							"Import Error",
-							JOptionPane.ERROR_MESSAGE);
-					return;
-				}
+				log.warn("Failed to create config dir: {}", CONFIG_DIR.getAbsolutePath());
+			}
+
+			File[] files = CONFIG_DIR.listFiles((d, n) -> n.toLowerCase().endsWith(".json"));
+
+			if (files == null || files.length == 0)
+			{
+				JButton openFolderBtn = new JButton("Open Config Folder");
+				openFolderBtn.setAlignmentX(LEFT_ALIGNMENT);
+				openFolderBtn.addActionListener(ev -> openConfigFolder());
+
+				JLabel emptyLabel = new JLabel("No configs found in folder.");
+				emptyLabel.setAlignmentX(LEFT_ALIGNMENT);
+
+				JPanel emptyPanel = new JPanel();
+				emptyPanel.setLayout(new BoxLayout(emptyPanel, BoxLayout.Y_AXIS));
+				emptyPanel.add(emptyLabel);
+				emptyPanel.add(Box.createVerticalStrut(8));
+				emptyPanel.add(openFolderBtn);
+
+				JOptionPane.showMessageDialog(this, emptyPanel,
+						"Import Config",
+						JOptionPane.INFORMATION_MESSAGE);
+				return;
+			}
+
+			String[] names = new String[files.length];
+			for (int i = 0; i < files.length; i++)
+			{
+				names[i] = files[i].getName();
+			}
+
+			JComboBox<String> fileCombo = new JComboBox<>(names);
+			fileCombo.setAlignmentX(LEFT_ALIGNMENT);
+
+			JButton openFolderBtn = new JButton("Open Config Folder");
+			openFolderBtn.setAlignmentX(LEFT_ALIGNMENT);
+			openFolderBtn.addActionListener(ev -> openConfigFolder());
+
+			JLabel chooseLabel = new JLabel("Choose a config file to import:");
+			chooseLabel.setAlignmentX(LEFT_ALIGNMENT);
+
+			JPanel pickerPanel = new JPanel();
+			pickerPanel.setLayout(new BoxLayout(pickerPanel, BoxLayout.Y_AXIS));
+			pickerPanel.add(chooseLabel);
+			pickerPanel.add(Box.createVerticalStrut(4));
+			pickerPanel.add(fileCombo);
+			pickerPanel.add(Box.createVerticalStrut(8));
+			pickerPanel.add(openFolderBtn);
+
+			int result = JOptionPane.showConfirmDialog(this, pickerPanel,
+					"Import Config",
+					JOptionPane.OK_CANCEL_OPTION,
+					JOptionPane.QUESTION_MESSAGE);
+
+			if (result != JOptionPane.OK_OPTION)
+			{
+				return;
+			}
+
+			String selected = (String) fileCombo.getSelectedItem();
+			if (selected == null)
+			{
+				return;
+			}
+
+			try
+			{
+				File file = new File(CONFIG_DIR, selected);
+				json = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+			}
+			catch (Exception e)
+			{
+				log.warn("Failed to read config file", e);
+				JOptionPane.showMessageDialog(this,
+						"Failed to read file: " + e.getMessage(),
+						"Import Error",
+						JOptionPane.ERROR_MESSAGE);
+				return;
 			}
 		}
 
