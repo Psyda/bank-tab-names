@@ -2177,7 +2177,14 @@ public class BankTabNamesPanel extends PluginPanel
 
 		void loadFrom(TabConfig tc)
 		{
-			textField.setText(tc.getText());
+			// Only replace the text when it actually differs. Calling setText
+			// resets the caret to the end, and since every keystroke saves and
+			// triggers a config refresh, replacing identical text here would
+			// jump the caret on every character typed.
+			if (!textField.getText().equals(tc.getText()))
+			{
+				textField.setText(tc.getText());
+			}
 			fontCombo.setSelectedItem(tc.getFont());
 			enabledCheck.setSelected(tc.isEnabled());
 			updateIconLabel(tc);

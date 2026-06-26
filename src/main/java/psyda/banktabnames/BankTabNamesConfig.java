@@ -69,4 +69,23 @@ public interface BankTabNamesConfig extends Config
     {
         return false;
     }
+
+    @ConfigSection(
+            name = "Bank menu safety",
+            description = "Reduce accidental clicks on the game's risky bank tab options",
+            position = 3
+    )
+    String bankMenuSection = "bankMenuSection";
+
+    @ConfigItem(
+            keyName = "bankMenuGuard",
+            name = "Risky tab options",
+            description = "Protect against accidental clicks on the game's 'Collapse' and 'Remove-placeholders' options on bank tab right-click menus. Show only on Shift, or hide them entirely.",
+            section = "bankMenuSection",
+            position = 0
+    )
+    default BankMenuGuard bankMenuGuard()
+    {
+        return BankMenuGuard.OFF;
+    }
 }

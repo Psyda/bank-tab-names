@@ -19,12 +19,16 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Constants;
+import net.runelite.api.KeyCode;
+import net.runelite.api.Menu;
 import net.runelite.api.MenuAction;
+import net.runelite.api.MenuEntry;
 import net.runelite.api.Point;
 import net.runelite.api.ScriptID;
 import net.runelite.api.Skill;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.MenuEntryAdded;
+import net.runelite.api.events.MenuOpened;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.gameval.InterfaceID;
@@ -94,6 +98,7 @@ public class BankTabNamesPlugin extends Plugin
 	private static final String SET_GAME_SPRITE = "Add game sprite";
 	private static final String CLEAR_ALL_ICONS = "Clear all icons";
 	private static final String EDIT_ICONS = "Edit icons";
+	private static final String SUBMENU_NAME = "Bank Tab Names";
 
 	static final int MAX_TABS = 10;
 	private static final int TAB_CHILD_START = 10;
@@ -266,6 +271,9 @@ public class BankTabNamesPlugin extends Plugin
 			clearGameSprites();
 			hideAllPooledOverlays();
 			destroyDragGhost();
+			// Overlays are hidden above; now repaint the tabs to their game
+			// defaults so they aren't left blank after the plugin is disabled.
+			rebuildBank();
 		});
 		bankOpen = false;
 		dragActive = false;
@@ -537,7 +545,18 @@ public class BankTabNamesPlugin extends Plugin
 	{
 		if (event.getGroup().equals(CONFIG_GROUP))
 		{
-			clientThread.invokeLater(this::applyAllTabs);
+			// Rebuild the bank so the game repaints tab defaults (restoring a
+			// disabled or emptied tab's original icon/number). The rebuild
+			// re-fires our script hook, which re-applies overlays to the tabs
+			// that are still customized. Fall back to applyAllTabs if the bank
+			// isn't open / can't be rebuilt.
+			clientThread.invokeLater(() ->
+			{
+				if (!rebuildBank())
+				{
+					applyAllTabs();
+				}
+			});
 			if (panel != null)
 			{
 				panel.refreshFromConfig();
@@ -594,97 +613,138 @@ public class BankTabNamesPlugin extends Plugin
 		final int idx = tabIndex;
 		TabConfig tc = loadTabConfig(tabIndex);
 
+		// All of our actions live under a single "Bank Tab Names" submenu so
+		// they no longer sit directly beside the game's own, easily misclicked
+		// tab options such as Collapse and Remove-placeholders.
+		Menu sub = client.getMenu().createMenuEntry(-1)
+				.setOption(SUBMENU_NAME)
+				.setTarget(event.getTarget())
+				.setType(MenuAction.RUNELITE)
+				.createSubMenu();
+
 		// Edit icons
 		if (!tc.getIcons().isEmpty())
 		{
-			client.getMenu().createMenuEntry(-1)
-					.setParam0(event.getActionParam0())
-					.setParam1(event.getActionParam1())
-					.setTarget(event.getTarget())
+			sub.createMenuEntry(-1)
 					.setOption(EDIT_ICONS)
 					.setType(MenuAction.RUNELITE)
-					.setIdentifier(tabIndex)
 					.onClick(e -> onEditIcons(idx));
 		}
 
 		// Clear all icons
 		if (!tc.getIcons().isEmpty())
 		{
-			client.getMenu().createMenuEntry(-1)
-					.setParam0(event.getActionParam0())
-					.setParam1(event.getActionParam1())
-					.setTarget(event.getTarget())
+			sub.createMenuEntry(-1)
 					.setOption(CLEAR_ALL_ICONS)
 					.setType(MenuAction.RUNELITE)
-					.setIdentifier(tabIndex)
 					.onClick(e -> onClearAllIcons(idx));
 		}
 
 		// Add custom icon (only if custom icons are available)
 		if (!customIconManager.getIconNames().isEmpty())
 		{
-			client.getMenu().createMenuEntry(-1)
-					.setParam0(event.getActionParam0())
-					.setParam1(event.getActionParam1())
-					.setTarget(event.getTarget())
+			sub.createMenuEntry(-1)
 					.setOption(SET_CUSTOM_ICON)
 					.setType(MenuAction.RUNELITE)
-					.setIdentifier(tabIndex)
 					.onClick(e -> onSetCustomIcon(idx));
 		}
 
 		// Add game sprite
-		client.getMenu().createMenuEntry(-1)
-				.setParam0(event.getActionParam0())
-				.setParam1(event.getActionParam1())
-				.setTarget(event.getTarget())
+		sub.createMenuEntry(-1)
 				.setOption(SET_GAME_SPRITE)
 				.setType(MenuAction.RUNELITE)
-				.setIdentifier(tabIndex)
 				.onClick(e -> onSetGameSprite(idx));
 
 		// Add skill icon
-		client.getMenu().createMenuEntry(-1)
-				.setParam0(event.getActionParam0())
-				.setParam1(event.getActionParam1())
-				.setTarget(event.getTarget())
+		sub.createMenuEntry(-1)
 				.setOption(SET_SKILL_ICON)
 				.setType(MenuAction.RUNELITE)
-				.setIdentifier(tabIndex)
 				.onClick(e -> onSetSkillIcon(idx));
 
 		// Add item icon
-		client.getMenu().createMenuEntry(-1)
-				.setParam0(event.getActionParam0())
-				.setParam1(event.getActionParam1())
-				.setTarget(event.getTarget())
+		sub.createMenuEntry(-1)
 				.setOption(SET_ITEM_ICON)
 				.setType(MenuAction.RUNELITE)
-				.setIdentifier(tabIndex)
 				.onClick(e -> onSetItemIcon(idx));
 
 		// Clear text
 		if (!tc.getText().isEmpty())
 		{
-			client.getMenu().createMenuEntry(-1)
-					.setParam0(event.getActionParam0())
-					.setParam1(event.getActionParam1())
-					.setTarget(event.getTarget())
+			sub.createMenuEntry(-1)
 					.setOption(CLEAR_TEXT)
 					.setType(MenuAction.RUNELITE)
-					.setIdentifier(tabIndex)
 					.onClick(e -> onClearText(idx));
 		}
 
 		// Edit text
-		client.getMenu().createMenuEntry(-1)
-				.setParam0(event.getActionParam0())
-				.setParam1(event.getActionParam1())
-				.setTarget(event.getTarget())
+		sub.createMenuEntry(-1)
 				.setOption(EDIT_TEXT)
 				.setType(MenuAction.RUNELITE)
-				.setIdentifier(tabIndex)
 				.onClick(e -> onEditText(idx));
+	}
+
+	/**
+	 * Optionally hides the game's risky bank tab options (Collapse,
+	 * Remove-placeholders) so they aren't clicked by accident. In Shift mode
+	 * they are hidden unless Shift is held. Controlled by the "Risky tab
+	 * options" config setting.
+	 */
+	@Subscribe
+	public void onMenuOpened(MenuOpened event)
+	{
+		if (!bankOpen)
+		{
+			return;
+		}
+
+		BankMenuGuard mode = config.bankMenuGuard();
+		if (mode == BankMenuGuard.OFF)
+		{
+			return;
+		}
+
+		// In Shift mode, holding Shift reveals the options as normal.
+		if (mode == BankMenuGuard.SHIFT && client.isKeyPressed(KeyCode.KC_SHIFT))
+		{
+			return;
+		}
+
+		MenuEntry[] entries = event.getMenuEntries();
+
+		// Only touch a bank tab's right-click menu. The game adds a "View tab"
+		// or "View all items" entry for those.
+		boolean isTabMenu = false;
+		for (MenuEntry e : entries)
+		{
+			String opt = Text.removeTags(e.getOption());
+			if (opt.equals("View tab") || opt.equals("View all items"))
+			{
+				isTabMenu = true;
+				break;
+			}
+		}
+		if (!isTabMenu)
+		{
+			return;
+		}
+
+		for (MenuEntry e : entries)
+		{
+			if (isDangerousBankOption(e.getOption()))
+			{
+				client.getMenu().removeMenuEntry(e);
+			}
+		}
+	}
+
+	/**
+	 * True for the game's destructive bank tab options that are easy to misclick:
+	 * "Collapse" and "Remove-placeholders".
+	 */
+	private boolean isDangerousBankOption(String option)
+	{
+		String o = Text.removeTags(option).toLowerCase();
+		return o.contains("collapse") || o.contains("placeholder");
 	}
 
 	// -----------------------------------------------------------------------
@@ -1316,6 +1376,33 @@ public class BankTabNamesPlugin extends Plugin
 	 * reconfiguring the ones needed. No new widgets are created unless the pool is
 	 * too small, which only happens when the user adds more icons than before.
 	 */
+	/**
+	 * Asks the bank to rebuild itself by replaying its own redraw callback (the
+	 * script and arguments stored on the ITEMS widget). This repaints the tabs
+	 * to their game defaults, which is how a disabled or emptied tab gets its
+	 * original icon/number back, and how stale tabs are cleaned up when the
+	 * plugin is turned off. Mirrors RuneLite's BankSearch.layoutBank().
+	 *
+	 * Must be called on the client thread. Returns true if a rebuild was run.
+	 */
+	private boolean rebuildBank()
+	{
+		Widget bankItems = client.getWidget(InterfaceID.Bankmain.ITEMS);
+		if (bankItems == null)
+		{
+			return false;
+		}
+
+		Object[] args = bankItems.getOnInvTransmitListener();
+		if (args == null)
+		{
+			return false;
+		}
+
+		client.runScript(args);
+		return true;
+	}
+
 	private void applyAllTabs()
 	{
 		Widget tabContainer = client.getWidget(InterfaceID.Bankmain.TABS);
@@ -1462,9 +1549,9 @@ public class BankTabNamesPlugin extends Plugin
 	}
 
 	/**
-	 * Creates a text overlay widget on Bankmain.INFINITE for the given tab.
-	 * Always creates a fresh widget (hiding any previous one) to guarantee it
-	 * has a higher child index than icon overlays and renders on top.
+	 * Creates or reuses the text overlay widget on Bankmain.INFINITE for the
+	 * given tab. The widget is pooled and only recreated when missing, stale, or
+	 * when a new icon child has pushed it below the icons in z-order.
 	 */
 	private void createTextOverlay(Widget overlayParent, Widget tabWidget, TabConfig tc,
 								   int tabIndex, int tabsOffsetX, int tabsOffsetY,
