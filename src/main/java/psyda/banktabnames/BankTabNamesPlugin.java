@@ -54,7 +54,7 @@ import net.runelite.client.util.Text;
 @PluginDescriptor(
 		name = "Bank Tab Names",
 		description = "Customize your bank tabs with styled text, item icons, skill icons, custom images, and manual sizing",
-		tags = {"bank", "tab", "name", "custom", "icon", "edit", "psyda", "skill"}
+		tags = {"bank", "tab", "tags", "creative", "custom", "icon", "art", "edit", "psyda"}
 )
 @Slf4j
 public class BankTabNamesPlugin extends Plugin
@@ -164,6 +164,15 @@ public class BankTabNamesPlugin extends Plugin
 	 * is not clipped by the TABS container. One widget per tab (or null).
 	 */
 	private final Widget[] textOverlayPool = new Widget[MAX_TABS];
+
+	/**
+	 * Set true for a tab when a new icon child is created on a rebuild. A new
+	 * icon child gets a higher child index than the existing text widget and
+	 * would render on top of it, so the text widget is recreated once to return
+	 * it to the top. This only fires when icons are added, never per frame, so
+	 * it does not leak widgets the way unconditional recreation did.
+	 */
+	private final boolean[] textTopDirty = new boolean[MAX_TABS];
 
 	/**
 	 * Set to true when a destructive script fires, signaling that all pooled widget
@@ -1464,17 +1473,30 @@ public class BankTabNamesPlugin extends Plugin
 		int textX = tabWidget.getOriginalX() + tabsOffsetX + modeOffsetX;
 		int textY = tabWidget.getOriginalY() + tabsOffsetY;
 
-		// Hide the old text widget if it exists. We create a new one each cycle
-		// so it always has a higher child index than any icon overlays, ensuring
-		// text renders on top regardless of when icons were first added.
-		if (textOverlayPool[tabIndex] != null)
-		{
-			textOverlayPool[tabIndex].setHidden(true);
-		}
+		// Reuse the pooled text widget. Recreating it every cycle (the previous
+		// behaviour) only hid the old one and left it parented on INFINITE, so
+		// hidden BTN_tabN_text widgets piled up without bound while the bank
+		// stayed open, dragging frame rate down until the bank was closed.
+		//
+		// We only create a fresh widget when there isn't one yet, when a new
+		// icon child was just added (textTopDirty, to restore text-on-top
+		// z-order), or when the pooled ref is stale after a destructive rebuild.
+		Widget textOverlay = textOverlayPool[tabIndex];
+		boolean needNew = textOverlay == null
+				|| textTopDirty[tabIndex]
+				|| textOverlay.getParentId() != overlayParent.getId();
 
-		Widget textOverlay = overlayParent.createChild(-1, WidgetType.TEXT);
-		textOverlay.setName("BTN_tab" + tabIndex + "_text");
-		textOverlayPool[tabIndex] = textOverlay;
+		if (needNew)
+		{
+			if (textOverlay != null)
+			{
+				textOverlay.setHidden(true);
+			}
+			textOverlay = overlayParent.createChild(-1, WidgetType.TEXT);
+			textOverlay.setName("BTN_tab" + tabIndex + "_text");
+			textOverlayPool[tabIndex] = textOverlay;
+			textTopDirty[tabIndex] = false;
+		}
 
 		textOverlay.setOriginalX(textX);
 		textOverlay.setOriginalY(textY);
@@ -1606,6 +1628,9 @@ public class BankTabNamesPlugin extends Plugin
 		Widget w = container.createChild(-1, WidgetType.GRAPHIC);
 		w.setName("BTN_tab" + tabIndex + "_icon" + poolIndex);
 		pool.add(w);
+		// This new icon child outranks the tab's text widget in child index, so
+		// flag the text widget to be recreated on top during Phase 3.
+		textTopDirty[tabIndex] = true;
 		return w;
 	}
 
@@ -2067,6 +2092,7 @@ public class BankTabNamesPlugin extends Plugin
 			}
 			activeOverlayCount[i] = 0;
 			textOverlayPool[i] = null;
+			textTopDirty[i] = false;
 		}
 	}
 
