@@ -144,18 +144,27 @@ public class BankTabNamesPlugin extends Plugin
 
 	/**
 	 * A tab drag must be held for at least this many client ticks (20ms each)
-	 * before the plugin treats it as a deliberate rearrange. 6 ticks is roughly
-	 * 120ms, just long enough to separate a held drag from a slipped click.
+	 * before the plugin treats it as a deliberate rearrange, separating a held
+	 * drag from a slipped click. Backed by the "Minimum hold time" config item
+	 * (stored in milliseconds, converted here). 0 disables the hold guard.
 	 */
-	private static final int DRAG_MIN_HOLD_TICKS = 6;
+	private int dragMinHoldTicks()
+	{
+		return Math.max(0, config.dragMinHoldMs() / Constants.CLIENT_TICK_LENGTH);
+	}
 
 	/**
 	 * The cursor must travel at least this many pixels from where the drag
 	 * began before the plugin will swap designs. Clicking near the edge of a
 	 * tab and twitching onto the neighbor used to shuffle the name layout even
 	 * though the game never registered a tab move; this filters those out.
+	 * Backed by the "Minimum drag distance" config item. 0 disables the
+	 * distance guard.
 	 */
-	private static final int DRAG_MIN_DISTANCE = 15;
+	private int dragMinDistance()
+	{
+		return Math.max(0, config.dragMinDistance());
+	}
 
 	// Script IDs that trigger bank tab rebuilds
 	private final int[] BANK_REBUILD_SCRIPTS = {
@@ -258,7 +267,7 @@ public class BankTabNamesPlugin extends Plugin
 	/** Client ticks the current drag has been held for. */
 	private int dragHoldTicks;
 
-	/** Latched true once the cursor has moved DRAG_MIN_DISTANCE px from the start. */
+	/** Latched true once the cursor has moved the configured drag distance from the start. */
 	private boolean dragMovedEnough;
 
 	/**
@@ -1129,13 +1138,13 @@ public class BankTabNamesPlugin extends Plugin
 				{
 					int dx = mouse.getX() - dragStartX;
 					int dy = mouse.getY() - dragStartY;
-					dragMovedEnough = (dx * dx + dy * dy)
-							>= DRAG_MIN_DISTANCE * DRAG_MIN_DISTANCE;
+					int minDist = dragMinDistance();
+					dragMovedEnough = (dx * dx + dy * dy) >= minDist * minDist;
 				}
 			}
 
 			// Qualify once both thresholds are met, then show the ghost.
-			if (!dragQualified && dragMovedEnough && dragHoldTicks >= DRAG_MIN_HOLD_TICKS)
+			if (!dragQualified && dragMovedEnough && dragHoldTicks >= dragMinHoldTicks())
 			{
 				dragQualified = true;
 				if (dragStartTab >= 0)

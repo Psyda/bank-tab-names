@@ -4,6 +4,8 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
+import net.runelite.client.config.Units;
 
 @ConfigGroup(BankTabNamesPlugin.CONFIG_GROUP)
 public interface BankTabNamesConfig extends Config
@@ -37,6 +39,41 @@ public interface BankTabNamesConfig extends Config
     default boolean onlyShowInBank()
     {
         return false;
+    }
+
+    @ConfigSection(
+            name = "Drag protection",
+            description = "Guards against accidentally swapping tab designs when clicking near a tab edge",
+            position = 1
+    )
+    String dragSection = "dragSection";
+
+    @ConfigItem(
+            keyName = "dragMinDistance",
+            name = "Minimum drag distance",
+            description = "How far the cursor must move from the drag start before tab designs swap. Raise this if misclicks still shuffle your tabs, lower it (or set 0) if fast intentional drags aren't being picked up, for example with the Anti Drag plugin changing drag timing.",
+            section = "dragSection",
+            position = 0
+    )
+    @Range(max = 50)
+    @Units(Units.PIXELS)
+    default int dragMinDistance()
+    {
+        return 10;
+    }
+
+    @ConfigItem(
+            keyName = "dragMinHoldMs",
+            name = "Minimum hold time",
+            description = "How long the mouse button must be held before tab designs swap. Raise this if misclicks still shuffle your tabs, lower it (or set 0) if fast intentional drags aren't being picked up.",
+            section = "dragSection",
+            position = 1
+    )
+    @Range(max = 500)
+    @Units(Units.MILLISECONDS)
+    default int dragMinHoldMs()
+    {
+        return 80;
     }
 
     @ConfigSection(
