@@ -8,6 +8,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.function.Consumer;
 import javax.inject.Inject;
@@ -18,7 +19,9 @@ import javax.swing.SwingUtilities;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Constants;
+import net.runelite.api.GameState;
 import net.runelite.api.KeyCode;
 import net.runelite.api.Menu;
 import net.runelite.api.MenuAction;
@@ -27,6 +30,7 @@ import net.runelite.api.Point;
 import net.runelite.api.ScriptID;
 import net.runelite.api.Skill;
 import net.runelite.api.events.ClientTick;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.MenuOpened;
 import net.runelite.api.events.ScriptPostFired;
@@ -74,6 +78,16 @@ public class BankTabNamesPlugin extends Plugin
 	private static final String KEY_CONFIG_VERSION = "config_version";
 
 	/**
+	 * Set by migrateLegacyGroupConfig when legacy content is imported, then
+	 * consumed (and unset) by onGameStateChanged on the next login to show a
+	 * one-time chat notice. Persisted as config so the notice survives the
+	 * client being closed between the import and the first login. Values:
+	 * "restored" (legacy tabs were applied live) or "migrated" (saved as a
+	 * preset only, current tabs untouched).
+	 */
+	private static final String KEY_PENDING_MIGRATION_NOTICE = "pending_migration_notice";
+
+	/**
 	 * Current config schema version. Increment this when making breaking changes
 	 * to the config format. The plugin checks the stored version on startup and
 	 * runs any necessary migrations before loading tab configs.
@@ -81,8 +95,30 @@ public class BankTabNamesPlugin extends Plugin
 	 * Version history:
 	 *   0 (absent) - Original format, single icon per tab via iconmode/iconitem/iconcustom keys
 	 *   1          - Multi-icon list (icons_ JSON), manual size/offset, zIndex, disableFitting
+	 *   2          - Imports tab names/fonts/colors left under the original plugin's
+	 *                "BankTabNames" config group (see migrateLegacyGroupConfig)
 	 */
-	private static final int CURRENT_CONFIG_VERSION = 1;
+	private static final int CURRENT_CONFIG_VERSION = 2;
+
+	/**
+	 * Config group used by the original (pre-rewrite) version of this plugin.
+	 * Tab names, fonts, text colors, and disable flags were stored under it as
+	 * flat per-tab keys from the RuneLite config panel.
+	 */
+	private static final String LEGACY_CONFIG_GROUP = "BankTabNames";
+
+	/**
+	 * Config key under which saved presets are stored as a JSON map of
+	 * {name -> {tab_0: TabConfig, ...}}. Shared with BankTabNamesPanel.
+	 */
+	static final String SAVED_CONFIGS_KEY = "saved_configs";
+
+	/**
+	 * Type token for the saved presets map: preset name -> tab map.
+	 * Must stay in the same format the panel reads and writes.
+	 */
+	private static final Type PRESETS_MAP_TYPE =
+			new TypeToken<LinkedHashMap<String, LinkedHashMap<String, TabConfig>>>(){}.getType();
 
 	// Legacy keys (for migration)
 	private static final String KEY_ICON_MODE = "iconmode_";
@@ -105,6 +141,21 @@ public class BankTabNamesPlugin extends Plugin
 
 	static final int TAB_WIDTH = 41;
 	static final int TAB_HEIGHT = 40;
+
+	/**
+	 * A tab drag must be held for at least this many client ticks (20ms each)
+	 * before the plugin treats it as a deliberate rearrange. 6 ticks is roughly
+	 * 120ms, just long enough to separate a held drag from a slipped click.
+	 */
+	private static final int DRAG_MIN_HOLD_TICKS = 6;
+
+	/**
+	 * The cursor must travel at least this many pixels from where the drag
+	 * began before the plugin will swap designs. Clicking near the edge of a
+	 * tab and twitching onto the neighbor used to shuffle the name layout even
+	 * though the game never registered a tab move; this filters those out.
+	 */
+	private static final int DRAG_MIN_DISTANCE = 15;
 
 	// Script IDs that trigger bank tab rebuilds
 	private final int[] BANK_REBUILD_SCRIPTS = {
@@ -199,6 +250,22 @@ public class BankTabNamesPlugin extends Plugin
 
 	/** The tab index currently under the mouse during a drag, or -1. */
 	private int dragHoverTab = -1;
+
+	/** Canvas position where the current drag began, for the distance check. */
+	private int dragStartX = -1;
+	private int dragStartY = -1;
+
+	/** Client ticks the current drag has been held for. */
+	private int dragHoldTicks;
+
+	/** Latched true once the cursor has moved DRAG_MIN_DISTANCE px from the start. */
+	private boolean dragMovedEnough;
+
+	/**
+	 * True once the drag has satisfied both the hold-time and distance
+	 * thresholds. Only qualified drags show the ghost and swap designs on drop.
+	 */
+	private boolean dragQualified;
 
 	/**
 	 * Ghost overlay widget that follows the cursor during a drag operation.
@@ -466,10 +533,242 @@ public class BankTabNamesPlugin extends Plugin
 			log.info("Migration 0->1: legacy icon migration handled by loadTabConfig");
 		}
 
+		// Migration: version 1 -> 2
+		// The original (pre-rewrite) plugin stored its settings under the
+		// "BankTabNames" config group; the rewrite reads "banktabnames", so
+		// tab names set in the old version were silently ignored. Import them.
+		if (storedVersion < 2)
+		{
+			migrateLegacyGroupConfig();
+		}
+
 		// Stamp the current version
 		configManager.setConfiguration(CONFIG_GROUP, KEY_CONFIG_VERSION,
 				String.valueOf(CURRENT_CONFIG_VERSION));
 		log.info("Config migration complete, now at version {}", CURRENT_CONFIG_VERSION);
+	}
+
+	/**
+	 * Migration 1 -> 2: imports configs left behind by the original version of
+	 * this plugin, which stored everything under the "BankTabNames" config
+	 * group. Without this, updating from the old plugin silently dropped every
+	 * tab name, font, and color the user had set.
+	 *
+	 * The legacy tabs are always saved as a "Legacy Backup" preset. If nothing
+	 * is configured in the new format yet, the legacy tabs are also applied
+	 * live. If the user already built tabs in the new format, the live config
+	 * is left alone and a "Current Backup" preset is saved alongside the
+	 * legacy one, so both setups can be swapped between or deleted from the
+	 * panel's Saved Configs dropdown.
+	 */
+	private void migrateLegacyGroupConfig()
+	{
+		boolean disableMain = Boolean.parseBoolean(
+				configManager.getConfiguration(LEGACY_CONFIG_GROUP, "disableMainTabName"));
+
+		LinkedHashMap<String, TabConfig> legacyTabs = new LinkedHashMap<>();
+		boolean hasLegacyContent = false;
+
+		for (int i = 0; i < MAX_TABS; i++)
+		{
+			TabConfig tc = new TabConfig();
+
+			String name = configManager.getConfiguration(LEGACY_CONFIG_GROUP, "tab" + i + "Name");
+			if (name != null && !name.trim().isEmpty())
+			{
+				hasLegacyContent = true;
+
+				// The old plugin stored the text color as a separate
+				// java.awt.Color config; the rewrite does color via <col> tags.
+				String hex = legacyColorToHex(
+						configManager.getConfiguration(LEGACY_CONFIG_GROUP, "bankTextColor" + i));
+				tc.setText(hex != null ? "<col=" + hex + ">" + name : name);
+			}
+
+			boolean disabled = Boolean.parseBoolean(
+					configManager.getConfiguration(LEGACY_CONFIG_GROUP, "disableTab" + i));
+			if (i == 0)
+			{
+				// Very old versions used disableMainTabName for tab 0
+				disabled = disabled || disableMain;
+			}
+			tc.setEnabled(!disabled);
+
+			String fontStr = configManager.getConfiguration(LEGACY_CONFIG_GROUP, "bankFont" + i);
+			if (fontStr != null)
+			{
+				try
+				{
+					// TabFonts constant names are unchanged between versions
+					tc.setFont(TabFonts.valueOf(fontStr));
+				}
+				catch (IllegalArgumentException ignored)
+				{
+				}
+			}
+
+			legacyTabs.put("tab_" + i, tc);
+		}
+
+		if (!hasLegacyContent)
+		{
+			return;
+		}
+
+		boolean currentHasContent = currentConfigHasContent();
+
+		LinkedHashMap<String, LinkedHashMap<String, TabConfig>> presets = loadSavedPresets();
+		if (presets != null)
+		{
+			String legacyName = uniquePresetName(presets, "Legacy Backup");
+			presets.put(legacyName, legacyTabs);
+
+			if (currentHasContent)
+			{
+				// The user already set up tabs in the new format. Snapshot
+				// those too, so both setups are swappable presets.
+				String currentName = uniquePresetName(presets, "Current Backup");
+				presets.put(currentName, snapshotCurrentTabs());
+				log.info("Imported legacy config as preset '{}', kept current tabs (snapshot: '{}')",
+						legacyName, currentName);
+			}
+			else
+			{
+				log.info("Imported legacy config as preset '{}'", legacyName);
+			}
+
+			saveSavedPresets(presets);
+		}
+
+		if (!currentHasContent)
+		{
+			// Nothing configured in the new format yet: port the legacy tabs live.
+			for (int i = 0; i < MAX_TABS; i++)
+			{
+				saveTabConfig(i, legacyTabs.get("tab_" + i));
+			}
+			log.info("Ported legacy config into the live tabs");
+		}
+
+		// Queue a one-time chat notice for the next login. Persisted rather
+		// than kept in memory so it isn't lost if the client is closed
+		// before logging in.
+		configManager.setConfiguration(CONFIG_GROUP, KEY_PENDING_MIGRATION_NOTICE,
+				currentHasContent ? "migrated" : "restored");
+	}
+
+	/**
+	 * Converts a stored legacy color config value (java.awt.Color persisted as
+	 * its int RGB value) into an RRGGBB hex string for a col tag. Returns null
+	 * for white, absent, or unparseable values, since white is already the
+	 * default text color.
+	 */
+	private static String legacyColorToHex(String stored)
+	{
+		if (stored == null || stored.trim().isEmpty())
+		{
+			return null;
+		}
+
+		try
+		{
+			int rgb = Integer.decode(stored.trim());
+			int r = (rgb >> 16) & 0xFF;
+			int g = (rgb >> 8) & 0xFF;
+			int b = rgb & 0xFF;
+			if (r == 0xFF && g == 0xFF && b == 0xFF)
+			{
+				return null;
+			}
+			return String.format("%02X%02X%02X", r, g, b);
+		}
+		catch (NumberFormatException e)
+		{
+			return null;
+		}
+	}
+
+	/**
+	 * True if any tab in the current (new-format) config has text or icons.
+	 */
+	private boolean currentConfigHasContent()
+	{
+		for (int i = 0; i < MAX_TABS; i++)
+		{
+			TabConfig tc = loadTabConfig(i);
+			if (!tc.getText().isEmpty() || tc.hasAnyIcon())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Serializes the current tabs into a preset tab map.
+	 */
+	private LinkedHashMap<String, TabConfig> snapshotCurrentTabs()
+	{
+		LinkedHashMap<String, TabConfig> tabMap = new LinkedHashMap<>();
+		for (int i = 0; i < MAX_TABS; i++)
+		{
+			tabMap.put("tab_" + i, loadTabConfig(i));
+		}
+		return tabMap;
+	}
+
+	/**
+	 * Loads the saved presets map from config; same storage the panel uses.
+	 * Returns an empty map if nothing is stored yet, or null if existing JSON
+	 * failed to parse, in which case the caller must not write presets back or
+	 * it would clobber whatever is there.
+	 */
+	private LinkedHashMap<String, LinkedHashMap<String, TabConfig>> loadSavedPresets()
+	{
+		String json = configManager.getConfiguration(CONFIG_GROUP, SAVED_CONFIGS_KEY);
+		if (json == null || json.trim().isEmpty())
+		{
+			return new LinkedHashMap<>();
+		}
+
+		try
+		{
+			LinkedHashMap<String, LinkedHashMap<String, TabConfig>> map =
+					gson.fromJson(json, PRESETS_MAP_TYPE);
+			return map != null ? map : new LinkedHashMap<>();
+		}
+		catch (Exception e)
+		{
+			log.warn("Failed to parse saved configs during migration", e);
+			return null;
+		}
+	}
+
+	/**
+	 * Persists the saved presets map to config.
+	 */
+	private void saveSavedPresets(LinkedHashMap<String, LinkedHashMap<String, TabConfig>> presets)
+	{
+		configManager.setConfiguration(CONFIG_GROUP, SAVED_CONFIGS_KEY, gson.toJson(presets));
+	}
+
+	/**
+	 * Returns a preset name that doesn't collide with an existing one by
+	 * appending " (2)", " (3)", ... as needed.
+	 */
+	private static String uniquePresetName(LinkedHashMap<String, ?> presets, String base)
+	{
+		if (!presets.containsKey(base))
+		{
+			return base;
+		}
+
+		int n = 2;
+		while (presets.containsKey(base + " (" + n + ")"))
+		{
+			n++;
+		}
+		return base + " (" + n + ")";
 	}
 
 	/**
@@ -484,6 +783,33 @@ public class BankTabNamesPlugin extends Plugin
 	// -----------------------------------------------------------------------
 	// Event handlers
 	// -----------------------------------------------------------------------
+
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged event)
+	{
+		if (event.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+
+		String pending = configManager.getConfiguration(CONFIG_GROUP, KEY_PENDING_MIGRATION_NOTICE);
+		if (pending == null)
+		{
+			return;
+		}
+
+		// Clear first so this can only ever fire once, even if something
+		// below throws or LOGGED_IN fires again on a region load.
+		configManager.unsetConfiguration(CONFIG_GROUP, KEY_PENDING_MIGRATION_NOTICE);
+
+		final String message = "restored".equals(pending)
+				? "Bank Tab Names: your original config was restored. A backup"
+				+ " was also saved to the presets in the plugin panel."
+				: "Bank Tab Names: your original config was saved to the presets"
+				+ " in the plugin panel. Your current tabs were not changed.";
+
+		client.addChatMessage(ChatMessageType.CONSOLE, "", message, null);
+	}
 
 	@Subscribe
 	public void onScriptPostFired(ScriptPostFired event)
@@ -530,6 +856,11 @@ public class BankTabNamesPlugin extends Plugin
 			dragActive = false;
 			dragStartTab = -1;
 			dragHoverTab = -1;
+			dragStartX = -1;
+			dragStartY = -1;
+			dragHoldTicks = 0;
+			dragMovedEnough = false;
+			dragQualified = false;
 			dragGhostWidget = null;
 
 			// Auto-hide panel when bank closes (if configured)
@@ -771,26 +1102,61 @@ public class BankTabNamesPlugin extends Plugin
 
 		if (isDraggingTab && !dragActive)
 		{
-			// Drag just started
+			// Drag just started. Don't show the ghost or arm the swap yet;
+			// the drag has to qualify (hold time + distance) first, so a
+			// slipped click near a tab edge can't shuffle the layout.
 			dragActive = true;
+			dragQualified = false;
+			dragMovedEnough = false;
+			dragHoldTicks = 0;
 			dragStartTab = resolveTabUnderMouse(tabContainer);
 			dragHoverTab = dragStartTab;
 
-			if (dragStartTab >= 0)
-			{
-				log.debug("Tab drag started from tab {}", dragStartTab);
-				showDragGhost(tabContainer, dragStartTab);
-			}
+			Point mouse = client.getMouseCanvasPosition();
+			dragStartX = mouse != null ? mouse.getX() : -1;
+			dragStartY = mouse != null ? mouse.getY() : -1;
 		}
 		else if (isDraggingTab && dragActive)
 		{
-			// Drag in progress, update hover and ghost position
+			dragHoldTicks++;
+
+			// Latch the distance threshold once the cursor has moved far
+			// enough from where the drag began.
+			if (!dragMovedEnough && dragStartX >= 0)
+			{
+				Point mouse = client.getMouseCanvasPosition();
+				if (mouse != null)
+				{
+					int dx = mouse.getX() - dragStartX;
+					int dy = mouse.getY() - dragStartY;
+					dragMovedEnough = (dx * dx + dy * dy)
+							>= DRAG_MIN_DISTANCE * DRAG_MIN_DISTANCE;
+				}
+			}
+
+			// Qualify once both thresholds are met, then show the ghost.
+			if (!dragQualified && dragMovedEnough && dragHoldTicks >= DRAG_MIN_HOLD_TICKS)
+			{
+				dragQualified = true;
+				if (dragStartTab >= 0)
+				{
+					log.debug("Tab drag qualified from tab {} after {} ticks",
+							dragStartTab, dragHoldTicks);
+					showDragGhost(tabContainer, dragStartTab);
+				}
+			}
+
+			// Track hover and update the ghost while the drag is in progress
 			int current = resolveTabUnderMouse(tabContainer);
 			if (current >= 0 && current != dragHoverTab)
 			{
 				dragHoverTab = current;
 			}
-			updateDragGhostPosition();
+
+			if (dragQualified)
+			{
+				updateDragGhostPosition();
+			}
 		}
 		else if (!isDraggingTab && dragActive)
 		{
@@ -798,9 +1164,11 @@ public class BankTabNamesPlugin extends Plugin
 			dragActive = false;
 			hideDragGhost();
 
-			// Tab 0 is the "View all items" tab and cannot hold custom designs.
-			// Swapping with it causes icon overlays to desync from bank content.
-			if (dragStartTab > 0 && dragHoverTab > 0
+			// Only qualified drags swap. Tab 0 is the "View all items" tab and
+			// cannot hold custom designs; swapping with it causes icon overlays
+			// to desync from bank content.
+			if (dragQualified
+					&& dragStartTab > 0 && dragHoverTab > 0
 					&& dragStartTab != dragHoverTab
 					&& dragStartTab < MAX_TABS && dragHoverTab < MAX_TABS)
 			{
@@ -810,6 +1178,11 @@ public class BankTabNamesPlugin extends Plugin
 
 			dragStartTab = -1;
 			dragHoverTab = -1;
+			dragStartX = -1;
+			dragStartY = -1;
+			dragHoldTicks = 0;
+			dragMovedEnough = false;
+			dragQualified = false;
 		}
 	}
 
